@@ -1,0 +1,19 @@
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+
+# SQLite database files (created at runtime)
+*.sqlite
+*.sqlite-journal
+*.db
+backend/data/
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+.vscode/
+.idea/
