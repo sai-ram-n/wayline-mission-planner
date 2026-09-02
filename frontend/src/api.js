@@ -58,6 +58,19 @@ export const api = {
     patch: (id, fields) => unwrap(client.patch(`/waylines/${id}`, fields)),
     duplicate: (id, name) => unwrap(client.post(`/waylines/${id}/duplicate`, name ? { name } : {})),
     remove: (id) => unwrap(client.delete(`/waylines/${id}`)),
+
+    /** Direct download URL — the browser fetches it so the file never passes through JS. */
+    kmzUrl: (id) => `/api/waylines/${id}/kmz`,
+
+    /** Upload a .kmz as a raw binary body; no multipart parsing needed server-side. */
+    importKmz: (file, name) =>
+      unwrap(
+        client.post('/waylines/import', file, {
+          params: name ? { name } : undefined,
+          headers: { 'Content-Type': 'application/vnd.google-earth.kmz' },
+          timeout: 30000,
+        })
+      ),
   },
 
   folders: {

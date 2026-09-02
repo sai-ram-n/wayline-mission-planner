@@ -44,7 +44,7 @@ products.
 | 5 | Area + Linear route generation | ✅ Complete |
 | 6 | Wayline library | ✅ Complete |
 | 7 | Drone fleet + assignment | ✅ Complete |
-| 8 | KMZ import/export + polish | ⬜ Not started |
+| 8 | KMZ import/export + polish | ✅ Complete |
 
 ---
 
@@ -529,3 +529,67 @@ End-to-end in the browser against the live backend:
 **Phase 8** — KMZ import and export: `backend/wpml.js` building and parsing real WPML 1.0.6, the
 round-trip test against the captured fixture, wiring the library card's Download action, then
 final polish and the README.
+
+---
+
+## Phase 8 — KMZ import/export and polish ✅
+
+**Date:** 2026-09-02 · **Version:** 0.9.0
+
+### What was built
+- `backend/wpml.js` — the one place that knows the format. Builds `wpmz/template.kml` and
+  `wpmz/waylines.wpml` under namespace 1.0.6 from the §7 schema, and parses them back. Handles the
+  awkward parts: gimbal yaw and tilt sharing the `gimbalRotate` actuator (told apart by the enable
+  flags), the `useGlobal*` override flags, action groups, the takeoff reference point, and the
+  `heightMode` ⇄ ASL/ALT/AGL mapping.
+- `GET /api/waylines/:id/kmz` — downloads a real `.kmz` with a safe filename.
+- `POST /api/waylines/import` — accepts the file as a raw binary body, so no multipart dependency
+  was needed. Validates the parsed result against the same Zod schema as a normal create.
+- Library: a working Download action on each card, and an Import button.
+- `backend/test/wpml.test.mjs` — 10 tests. `backend/test/fixtures/synthetic-waypoint-route.kmz`
+  now exists, covering what the captured file could not.
+- README: what the app does, how to run the tests, and an explicit Known limitations section.
+
+### Key decisions
+- **Raw binary upload rather than multipart.** The import endpoint takes the `.kmz` as the request
+  body, which avoids adding a multipart parser for a single-file upload.
+- **Download goes through the browser**, via a temporary link to the export endpoint, so the file
+  never passes through JavaScript.
+- **`waylines.wpml` wins over `template.kml`** where the two disagree, since it is the executable
+  half; the template is the fallback and supplies placemarks when the wpml half has none — which
+  is exactly how the captured reference file is shaped.
+
+### Bugs found and fixed
+- The import route returned the new id as a bare string instead of the created wayline, because
+  `createWayline` returns an id. It now mirrors `POST /api/waylines`.
+- `httpError` could not carry field-level detail, so a validation failure on import would have lost
+  its reasons. It now takes optional `details`, surfaced by the error handler like Zod failures.
+
+### Known limitation, recorded rather than hidden
+Take Photo and Take Photo (Fixed Angle) both map to the WPML actuator `takePhoto`, and §7 records
+no distinct actuator for the fixed-angle variant, so an imported file cannot distinguish them.
+Inventing a non-standard element to carry the difference would corrupt the file for a real
+aircraft. There is a dedicated test asserting this, which fails loudly if the mapping is ever
+corrected.
+
+### Verified
+- `backend`: 10/10 tests. Parsing the genuine captured export yields the exact values in §7
+  (M30T, `safely`, `goHome`, 20, 15, 100, speed 10, height 209, EGM96 ⇒ ASL, `wide,zoom,ir`).
+  Build → parse → build → parse is stable, and no author email can leak into an export.
+- `frontend`: 16/16 tests.
+- API: export returns the right content type and filename with a valid three-entry archive;
+  import rebuilds 5 waypoints with 8/4/4/4/4 actions, settings and takeoff point intact. Error
+  paths return 400 for a non-zip, 400 for an empty body, 400 for a zip with no `wpmz`, and 404 for
+  an unknown id.
+- Browser: exported a route, re-imported the same bytes through the Import button, and the new
+  route appeared, was auto-selected and previewed correctly.
+- **Full acceptance path**, end to end: create a 3-waypoint mission with actions → appears in the
+  library with a thumbnail path → assign to two aircraft → advance pending → synced → in_progress
+  → complete → export `.kmz` → re-import → waypoints, per-waypoint speed override (7 m/s) and
+  gimbal tilt (−45°) all preserved.
+- Console clean.
+
+### Project status
+All eight phases are complete. Every phase is committed locally on `dev`; **none have been pushed**
+— there is still no GitHub credential on this machine (no `gh`, no credential helper, no token, no
+authorised SSH key). The commits are ready to push the moment one exists.

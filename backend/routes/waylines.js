@@ -14,6 +14,7 @@ import {
   waylineUpdateSchema,
 } from '../schemas.js';
 import { asyncHandler, httpError, validate } from '../middleware.js';
+import { buildKmz, parseKmz } from '../wpml.js';
 
 const router = Router();
 
@@ -42,6 +43,44 @@ router.get('/', asyncHandler((req, res) => {
   if (sort === 'oldest') items = [...items].reverse();
 
   res.json(items);
+}));
+
+/**
+ * Export a wayline as a real DJI-compatible .kmz (feature-reference §7).
+ * Declared before /:id so "import" is never read as an id.
+ */
+router.post('/import', asyncHandler(async (req, res) => {
+  // The body arrives as a raw octet-stream, so no multipart parser is needed.
+  const buffer = req.body;
+  if (!Buffer.isBuffer(buffer) || !buffer.length) {
+    throw httpError(400, 'Send the .kmz file as the request body');
+  }
+  if (buffer.length > 10 * 1024 * 1024) {
+    throw httpError(413, 'That .kmz is larger than the 10 MB import limit');
+  }
+
+  const name = typeof req.query.name === 'string' ? req.query.name.slice(0, 120) : undefined;
+  const payload = await parseKmz(buffer, { name });
+
+  const parsed = waylineCreateSchema.safeParse(payload);
+  if (!parsed.success) {
+    throw httpError(422, 'The .kmz parsed but does not describe a valid route', parsed.error.issues);
+  }
+
+  const id = createWayline(parsed.data);
+  res.status(201).json(getWayline(id));
+}));
+
+router.get('/:id/kmz', asyncHandler(async (req, res) => {
+  const wayline = getWayline(req.params.id);
+  if (!wayline) throw httpError(404, 'Wayline not found');
+
+  const kmz = await buildKmz(wayline);
+  // A conservative filename: keep it readable but safe on every filesystem.
+  const safeName = (wayline.name || 'wayline').replace(/[^\w.-]+/g, '_').slice(0, 80);
+  res.setHeader('Content-Type', 'application/vnd.google-earth.kmz');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}.kmz"`);
+  res.send(kmz);
 }));
 
 router.get('/:id', asyncHandler((req, res) => {

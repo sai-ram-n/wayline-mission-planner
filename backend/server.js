@@ -17,6 +17,14 @@ const PORT = Number(process.env.PORT) || 3001;
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
 app.use(express.json({ limit: '5mb' }));
+// KMZ uploads arrive as a raw binary body rather than multipart, which keeps the
+// import endpoint dependency-free.
+app.use(
+  express.raw({
+    type: ['application/vnd.google-earth.kmz', 'application/octet-stream', 'application/zip'],
+    limit: '10mb',
+  })
+);
 
 app.get('/api/health', (req, res) =>
   res.json({ status: 'ok', app: APP_NAME, version: VERSION, buildDate: BUILD_DATE })

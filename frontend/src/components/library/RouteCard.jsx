@@ -41,7 +41,7 @@ function formatUpdated(iso) {
   );
 }
 
-function OverflowMenu({ wayline, onRename, onMove, onDuplicate, onToggleLock, onDelete }) {
+function OverflowMenu({ wayline, onRename, onMove, onDuplicate, onToggleLock, onDelete, onDownload }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -58,13 +58,7 @@ function OverflowMenu({ wayline, onRename, onMove, onDuplicate, onToggleLock, on
     { label: 'Rename', icon: LuPencil, action: onRename, disabled: wayline.locked },
     { label: 'Move', icon: LuFolderInput, action: onMove, disabled: wayline.locked },
     { label: 'Duplicate', icon: LuCopy, action: onDuplicate },
-    {
-      label: 'Download .kmz',
-      icon: LuDownload,
-      action: null,
-      disabled: true,
-      note: 'Arrives in Phase 8',
-    },
+    { label: 'Download .kmz', icon: LuDownload, action: onDownload },
     {
       label: wayline.locked ? 'Unlock' : 'Lock',
       icon: wayline.locked ? LuLockOpen : LuLock,
@@ -127,6 +121,7 @@ export default function RouteCard({
   onDuplicate,
   onToggleLock,
   onDelete,
+  onDownload,
 }) {
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(wayline.name);
@@ -210,6 +205,7 @@ export default function RouteCard({
               onDuplicate={onDuplicate}
               onToggleLock={onToggleLock}
               onDelete={onDelete}
+              onDownload={onDownload}
             />
           </div>
 

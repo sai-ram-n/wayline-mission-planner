@@ -30,13 +30,16 @@ export function errorHandler(err, req, res, next) {
   if (status >= 500) console.error(err);
   res.status(status).json({
     error: err.expose || status < 500 ? err.message : 'Internal server error',
+    ...(err.details ? { details: err.details } : {}),
   });
 }
 
 /** Throw a client error that the handler above will surface verbatim. */
-export function httpError(status, message) {
+export function httpError(status, message, details) {
   const err = new Error(message);
   err.status = status;
   err.expose = true;
+  // Optional field-level detail, surfaced the same way Zod failures are.
+  if (details) err.details = details;
   return err;
 }

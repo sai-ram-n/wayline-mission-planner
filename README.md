@@ -6,8 +6,8 @@ waylines in a library, assign one to your drones, and export it as a flight-read
 
 Built entirely on free and open-source tooling — no paid APIs, no API keys, no accounts.
 
-> **Status:** in development, built phase by phase on the `dev` branch.
-> See [`docs/progress-log.md`](docs/progress-log.md) for what's done and what's next.
+> **Status:** feature-complete across all eight planned phases, on the `dev` branch.
+> See [`docs/progress-log.md`](docs/progress-log.md) for the per-phase record.
 
 ---
 
@@ -26,6 +26,28 @@ Zustand · React Hook Form + Zod · Axios · react-icons
 **Backend** — Node.js · Express · better-sqlite3 · Zod · JSZip · fast-xml-parser
 
 **Database** — SQLite (single file, zero configuration)
+
+## What it does
+
+**Mission editor** — click the map to place waypoints, drag to reposition, reorder by pointer or
+`Alt`+arrow keys. Per-waypoint altitude, speed, heading (including point-of-interest) and turn
+behaviour, each able to inherit from the route or override it. A full waypoint-action editor
+covering photo, video, interval capture, hover, aircraft yaw, gimbal yaw and tilt, zoom, panorama
+and folder creation, with live flight distance, duration and photo-count estimates.
+
+**Mapping routes** — draw an area polygon or a corridor centre line and get a boustrophedon survey
+route generated from GSD, side and forward overlap, course angle, margin and corridor extensions.
+It regenerates as you change any setting.
+
+**Library** — saved routes with generated SVG preview thumbnails, hierarchical folders, search,
+aircraft and route-type filters, sorting, and per-route rename, move, duplicate, lock, download
+and delete.
+
+**Fleet** — a mock fleet with per-aircraft status, and assignments that advance through
+`pending → synced → in_progress → complete`, with `failed` reachable from any unfinished state.
+
+**KMZ interchange** — export any route as a real DJI-compatible WPML 1.0.6 `.kmz`, and import one
+back. See [Known limitations](#known-limitations).
 
 ## Requirements
 
@@ -50,6 +72,41 @@ cd frontend && npm install && npm run dev
 | Backend API | http://localhost:3001/api |
 
 The SQLite database is created automatically on first run and seeded with a small mock fleet.
+
+## Tests
+
+```bash
+cd backend && npm test
+```
+
+```bash
+cd frontend && npm test
+```
+
+The backend suite covers WPML build and parse, including a round-trip against a genuine wayline
+export captured from a live editor. The frontend suite covers the route-generation geometry.
+
+## Known limitations
+
+These are deliberate and documented rather than undiscovered.
+
+- **Survey estimates are our own.** Turning a GSD into a flight-line spacing needs the camera's
+  sensor resolution, which the source exploration recorded no value for. `MAPPING_SENSORS` in
+  `backend/constants.js` therefore holds published still-image resolutions as a stated assumption.
+  Generated distances and photo counts respond correctly to every setting and are internally
+  consistent, but they do not reproduce the reference editor's exact figures.
+- **Take Photo and Take Photo (Fixed Angle) collapse on KMZ import.** Both map to the same WPML
+  actuator (`takePhoto`), and the captured schema records no distinct actuator for the fixed-angle
+  variant, so an imported file cannot tell them apart. Smuggling the difference through a
+  non-standard element would corrupt the file for a real aircraft. Covered by an explicit test.
+- **Four route types are out of scope.** Patrol, Slope, Geometric and Smart 3D Capture appear in
+  the Create Route dialog marked unsupported. Patrol is fully documented in the feature reference;
+  the other three were never explored.
+- **The fleet and assignment model is our own design.** The source application's fleet and task
+  modules were never explored, so this follows the project brief's simpler specification rather
+  than guessing at them.
+- **Terrain following is nominal.** `AGL` is stored and exported, but there is no elevation service,
+  so altitudes are not resolved against real terrain.
 
 ## Versioning
 

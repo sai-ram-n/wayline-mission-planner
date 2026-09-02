@@ -4,7 +4,7 @@
  * Folder tree and route list on the left, map preview of the selected route on
  * the right, with the same four metrics the reference shows beneath it.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LuArrowDownWideNarrow,
@@ -14,6 +14,7 @@ import {
   LuSearch,
   LuSpline,
   LuSquareDashed,
+  LuUpload,
   LuX,
 } from 'react-icons/lu';
 
@@ -57,6 +58,8 @@ export default function Library() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [moveTarget, setMoveTarget] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const fileInput = useRef(null);
 
   /* --------------------------------------------------------------- loading */
 
@@ -193,6 +196,37 @@ export default function Library() {
       if (folderId === folder.id) setFolderId(null);
     });
 
+  /**
+   * Download the .kmz by navigating to the export endpoint, so the browser owns
+   * the transfer and the file never has to pass through JavaScript.
+   */
+  const handleDownload = (wayline) => {
+    const link = document.createElement('a');
+    link.href = api.waylines.kmzUrl(wayline.id);
+    link.download = `${wayline.name}.kmz`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const handleImportFile = async (file) => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      // Strip the extension so the route is named after the file.
+      const name = file.name.replace(/\.kmz$/i, '').slice(0, 120);
+      const created = await api.waylines.importKmz(file, name);
+      await refresh();
+      setSelectedId(created.id);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImporting(false);
+      if (fileInput.current) fileInput.current.value = '';
+    }
+  };
+
   const handleCreateRoute = ({ route_type, aircraft_series, aircraft_model, payload_model, name }) => {
     setCreateOpen(false);
     const params = new URLSearchParams({
@@ -247,6 +281,23 @@ export default function Library() {
             <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-100">
               Route ({visible.length})
             </h1>
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".kmz,application/vnd.google-earth.kmz"
+              className="hidden"
+              onChange={(event) => handleImportFile(event.target.files?.[0])}
+            />
+            <button
+              type="button"
+              onClick={() => fileInput.current?.click()}
+              disabled={importing}
+              title="Import a DJI-compatible .kmz"
+              className="btn-secondary px-2 py-1 text-xs"
+            >
+              <LuUpload className="h-3.5 w-3.5" />
+              {importing ? 'Importing…' : 'Import'}
+            </button>
             <button
               type="button"
               onClick={() => setCreateOpen(true)}
@@ -360,6 +411,7 @@ export default function Library() {
                   onDuplicate={() => handleDuplicate(wayline)}
                   onToggleLock={() => handleToggleLock(wayline)}
                   onDelete={() => handleDelete(wayline)}
+                  onDownload={() => handleDownload(wayline)}
                 />
               ))}
             </ul>
