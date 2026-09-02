@@ -20,7 +20,14 @@ const router = Router();
 router.get('/', asyncHandler((req, res) => {
   let items = listWaylines();
 
-  const { q, model, series, route_type, sort } = req.query;
+  const { q, model, series, route_type, sort, folder_id } = req.query;
+  // "root" selects waylines that sit outside every folder.
+  if (folder_id) {
+    items =
+      folder_id === 'root'
+        ? items.filter((w) => !w.folder_id)
+        : items.filter((w) => w.folder_id === folder_id);
+  }
   if (q) {
     const needle = String(q).toLowerCase();
     items = items.filter(

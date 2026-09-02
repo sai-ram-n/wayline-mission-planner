@@ -89,10 +89,14 @@ export default function Editor() {
     }
     const requested = searchParams.get('type');
     const routeType = ['waypoint', 'area', 'linear'].includes(requested) ? requested : 'waypoint';
-    const series = searchParams.get('series');
-    const model = searchParams.get('model');
     if (mission.id || mission.route_type !== routeType || mission.waypoints.length) {
-      startRoute(routeType, { series, model });
+      startRoute(routeType, {
+        series: searchParams.get('series'),
+        model: searchParams.get('model'),
+        payload: searchParams.get('payload'),
+        name: searchParams.get('name'),
+        folder: searchParams.get('folder'),
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, searchParams]);
@@ -131,6 +135,11 @@ export default function Editor() {
         route_type: routeType,
         aircraft_series: series,
         aircraft_model: model,
+        payload_model: aircraft.payload ?? null,
+        // The library's Create Route dialog names the route up front, so the
+        // first save goes straight through without prompting again.
+        name: aircraft.name ?? '',
+        folder_id: aircraft.folder ?? null,
         settings: { ...(meta?.defaultSettings ?? {}), ...(extra ?? {}) },
       });
       setDraft([]);

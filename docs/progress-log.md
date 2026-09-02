@@ -42,7 +42,7 @@ products.
 | 3 | Waypoint editor — map canvas | ✅ Complete |
 | 4 | Waypoint settings + action editing | ✅ Complete |
 | 5 | Area + Linear route generation | ✅ Complete |
-| 6 | Wayline library | ⬜ Not started |
+| 6 | Wayline library | ✅ Complete |
 | 7 | Drone fleet + assignment | ⬜ Not started |
 | 8 | KMZ import/export + polish | ⬜ Not started |
 
@@ -412,3 +412,64 @@ panels from §8, and boustrophedon generation in `lib/routegen.js`.
 **Phase 6** — the wayline library: grid with SVG preview thumbnails, search, model and route-type
 filters, sort, folders, per-card Rename / Duplicate / Delete / Lock, and the Create Route dialog
 enforcing the §1 compatibility matrix.
+
+---
+
+## Phase 6 — Wayline library ✅
+
+**Date:** 2026-09-02 · **Version:** 0.7.0
+
+### What was built
+- `pages/Library.jsx` — the three-column layout from §2: folder tree, route list, and a map
+  preview of the selected route with the four metrics beneath it.
+- `components/library/RoutePreview.jsx` — SVG thumbnails generated from the waypoint path the
+  list endpoint already returns, with Point S marked. Nothing is stored, so a thumbnail can never
+  go stale against its route.
+- `components/library/RouteCard.jsx` — name, aircraft model with a drone glyph, route-type icon,
+  waypoint count, `Updated at YYYY-MM-DD HH:MM:SS`, inline rename pencil, and the overflow menu
+  (Rename · Move · Duplicate · Download · Lock · Delete).
+- `components/library/CreateRouteDialog.jsx` — all seven route types in their three groups with
+  the four out-of-scope ones marked unsupported, aircraft and model pickers that enforce the §1
+  compatibility matrix, the Matrice 400 payload picker, and the auto-incrementing
+  `New <Type> Route(n)` name.
+- `components/library/FolderTree.jsx` — hierarchical folders; the new-folder button creates a
+  subfolder, Shift+click creates a sibling.
+- `MapCanvas.jsx` gained a `readOnly` mode so the library reuses the editor's map without
+  offering editing.
+- Backend: `GET /api/waylines` now accepts `folder_id` (with `root` for unfiled routes).
+
+### Key decisions
+- **Search and filtering run client-side.** The backend supports the same filters, but the list is
+  small and already in memory, so typing stays instant with no request per keystroke. Server-side
+  filtering stays available for when the library grows.
+- **Every mutation refetches the list** rather than patching local state, so the UI cannot drift
+  from the server.
+- **Download .kmz is present but disabled**, labelled as arriving in Phase 8, rather than hidden —
+  the menu matches the reference's shape and says what is coming.
+- Selecting a card previews it; double-click, or the Open in editor button, opens it.
+
+### Verified
+End-to-end in the browser against the live backend:
+- Thumbnails render distinctly per route type — the linear corridor's zigzag, the area route's
+  parallel lines, and the waypoint perimeter are all recognisable.
+- Preview matches the editor exactly for the same route (35.82 ha, 18.14 km, 21 m 33 s, 52
+  waypoints), with all 52 markers drawn.
+- Route-type filter, aircraft filter, search and the New-Old / Old-New sort all narrow and reorder
+  correctly, with a distinct empty state for "no matches" versus "no routes yet".
+- Rename (inline), Duplicate, Lock, Unlock, Move and Delete all work; a locked route disables
+  Rename, Move and Delete while leaving Unlock available.
+- Cancelling a delete leaves the list untouched; the folder-delete confirmation uses the exact
+  warning text captured in §2.
+- Folders: plain click creates a subfolder of the selection, Shift+click creates a sibling —
+  confirmed against the stored `parent_id` values. Counts and folder filtering update correctly.
+- Create Route enforces the §1 matrix on every row: Waypoint allows all six series, Linear blocks
+  the M30 series, Smart 3D Capture and Patrol allow only M4E/M4D/M400. Unsupported types disable
+  OK and explain why. The M400 payload picker lists all four groups.
+- The dialog hands off to the editor with the route type, aircraft, model and pre-filled name; a
+  Mavic 3T area route correctly offers VISIBLE/IR lenses rather than the M30T's WIDE/ZOOM/IR.
+- `npm test` passes 16/16; production build succeeds; console clean.
+
+### Next
+**Phase 8** — KMZ import and export (`backend/wpml.js`) against the real fixture, wiring up the
+card's Download action, then final polish and the README. **Phase 7** (fleet and assignment)
+comes first.

@@ -136,6 +136,8 @@ export default function MapCanvas({
   onFinishDrawing,
   onCancelDrawing,
   onMoveGeometryVertex,
+  // Preview mode: no editing, used by the library's map panel.
+  readOnly = false,
 }) {
   const [basemap, setBasemap] = useState('street');
   const mapRef = useRef(null);
@@ -143,6 +145,7 @@ export default function MapCanvas({
   const positions = useMemo(() => waypoints.map((w) => [w.lat, w.lng]), [waypoints]);
 
   const handleMapClick = (latlng) => {
+    if (readOnly) return;
     // A placement mode (e.g. "set takeoff point") consumes the next click.
     if (placementMode) {
       onPlacePoint?.(latlng, placementMode);
@@ -212,7 +215,7 @@ export default function MapCanvas({
           ))}
 
         {/* Draggable handles on the committed shape's vertices. */}
-        {!drawMode &&
+        {!drawMode && !readOnly &&
           committed.map((position, index) => (
             <CircleMarker
               key={`geom-${index}`}
@@ -296,7 +299,7 @@ export default function MapCanvas({
               isStart: index === 0,
               isEnd: index === waypoints.length - 1 && waypoints.length > 1,
             })}
-            draggable
+            draggable={!readOnly}
             eventHandlers={{
               click: (event) => {
                 // Selecting a marker must not also drop a new waypoint.
