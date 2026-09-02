@@ -43,7 +43,7 @@ products.
 | 4 | Waypoint settings + action editing | ✅ Complete |
 | 5 | Area + Linear route generation | ✅ Complete |
 | 6 | Wayline library | ✅ Complete |
-| 7 | Drone fleet + assignment | ⬜ Not started |
+| 7 | Drone fleet + assignment | ✅ Complete |
 | 8 | KMZ import/export + polish | ⬜ Not started |
 
 ---
@@ -473,3 +473,59 @@ End-to-end in the browser against the live backend:
 **Phase 8** — KMZ import and export (`backend/wpml.js`) against the real fixture, wiring up the
 card's Download action, then final polish and the README. **Phase 7** (fleet and assignment)
 comes first.
+
+---
+
+## Phase 7 — Drone fleet and assignment ✅
+
+**Date:** 2026-09-02 · **Version:** 0.8.0
+
+### What was built
+- `pages/Drones.jsx` — the fleet grid and the assignment table on one page, with status-filter
+  chips carrying live counts.
+- `components/fleet/DroneCard.jsx` — per-aircraft card with inline rename, a status selector
+  (idle / flying / offline) and the number of assignments it holds.
+- `components/fleet/AssignDialog.jsx` — pick a route, tick one or more aircraft, create one
+  assignment per aircraft.
+- `components/fleet/AssignmentTable.jsx` — route → aircraft → status → assigned-at, with manual
+  advance, mark-failed, reset and remove.
+
+No backend work was needed; the drones and assignments endpoints from Phase 1 already covered it.
+
+### Key decisions
+- **This whole feature is our own design, and the code says so.** Feature-reference §10 records
+  that FlightHub's fleet and task modules were never explored, so inventing a lookalike would
+  break the project's "don't guess" rule. It follows the brief's fallback spec instead, and the
+  file headers state that plainly.
+- **Mismatches are surfaced, not blocked.** A route authored for an M30T will not fly correctly on
+  a Mavic 3T, and an offline aircraft cannot receive one — so the dialog flags both with a badge
+  and a warning, but still lets the user proceed. This is a mock fleet; a hard block would be
+  asserting a rule the exploration never established.
+- **Every mutation refetches**, as in the library, so the table cannot drift from the server.
+- `failed` is reachable from any unfinished state; `complete` and `failed` both offer a reset
+  rather than being dead ends.
+
+### Verified
+End-to-end in the browser against the live backend:
+- The four seeded aircraft render with the right series labels and statuses.
+- Assign dialog: the mismatch badges track the selected route — with the M30T area route chosen,
+  only the M3T and M3TD aircraft are flagged, and Falcon 01/02 are not. Selecting an offline
+  aircraft adds a second, separate warning. Submit stays disabled until a route and at least one
+  aircraft are chosen.
+- Assigning to three aircraft created exactly three rows, and the per-card assignment counts
+  updated.
+- The full lifecycle works: Pending → Synced → In progress → Complete, with no advance control
+  past Complete; mark-failed works from an unfinished row; reset returns either terminal state to
+  Pending; the filter counts follow every change.
+- Fleet edits: rename and status changes persist; adding an aircraft takes its model and series
+  from the `/api/meta` catalogue rather than free text.
+- Removing an assignment prompts by name and removes only that row.
+- **Deleting a wayline that has assignments cascades correctly** — checked directly against the
+  API: two assignments created, the wayline deleted (204), both assignment rows gone with no
+  foreign-key error and no orphans.
+- `npm test` passes 16/16; production build succeeds; console clean.
+
+### Next
+**Phase 8** — KMZ import and export: `backend/wpml.js` building and parsing real WPML 1.0.6, the
+round-trip test against the captured fixture, wiring the library card's Download action, then
+final polish and the README.
