@@ -40,7 +40,7 @@ products.
 | 1 | Backend scaffold + DB schema + REST API | ✅ Complete |
 | 2 | Frontend scaffold + routing + store | ✅ Complete |
 | 3 | Waypoint editor — map canvas | ✅ Complete |
-| 4 | Waypoint settings + action editing | ⬜ Not started |
+| 4 | Waypoint settings + action editing | ✅ Complete |
 | 5 | Area + Linear route generation | ⬜ Not started |
 | 6 | Wayline library | ⬜ Not started |
 | 7 | Drone fleet + assignment | ⬜ Not started |
@@ -265,3 +265,78 @@ End-to-end in the browser against the live backend:
 **Phase 4** — per-waypoint settings panel and the action editor: the real enums and tooltip text
 from feature-reference §5–§6, per-waypoint override toggles, the *Take Photo blocked while
 recording* rule and the *Follow Route* lens-chip behaviour, built on RHF + Zod.
+
+---
+
+## Phase 4 — Waypoint settings and action editing ✅
+
+**Date:** 2026-09-02 · **Version:** 0.5.0
+
+### What was built
+- `components/ui/Field.jsx` — the shared control vocabulary the reference panels use: number
+  steppers with coarse/fine buttons (±1 / ±10 / ±100), slider + numeric pairs, segmented tabs,
+  selects, toggles, multi-select chips, an info tooltip and a collapsible section.
+- `components/editor/GlobalSettingsPanel.jsx` — every control from feature-reference §5 with its
+  real default and enum: Camera Settings chips, Smart Low-Light, takeoff behaviour, Safe Takeoff
+  Altitude, Waypoint Altitude Mode, Global Altitude and Flight Speed, and the Advanced group
+  (Takeoff Speed, RTH altitude, Waypoint Type, Aircraft Yaw, Gimbal Control, Upon Completion,
+  synchronize-attitude).
+- `components/editor/WaypointPanel.jsx` — §11.2: altitude, speed, heading mode including Point of
+  Interest with POI coordinates, turn mode, damping distance, straight-line, and the four
+  *use route …* override toggles that map onto the WPML `useGlobal*` flags.
+- `components/editor/ActionEditor.jsx` — the quick-action strip, the "Add action" fly-out in the
+  documented order, the `< n-m >` pager, per-action delete, and a parameter editor for every
+  action type.
+- `lib/actions.js` — action defaults, menu ordering, file-name templates, and the camera state
+  machine behind the availability rules.
+- `store.js` — `recordCurrentAttitude`, plus a shared `attitudeActions()` builder that
+  `addWaypoint` now uses instead of its own inline copy.
+- `pages/Editor.jsx` — right-hand inspector with Route settings / Waypoint tabs; selecting a
+  waypoint switches to it.
+
+### Key decisions
+- **Aircraft-aware panels.** Camera chips come from the aircraft catalogue in `/api/meta`, so the
+  M30T shows WIDE/ZOOM/IR and Smart Low-Light while other models show their own sensors. Nothing
+  is hard-coded in the frontend.
+- **Blocked actions explain themselves.** The reference silently refuses to attach a blocked
+  action; we disable the menu entry and show the reason. Same behaviour, less confusing.
+- **Point of Interest is per-waypoint only.** It is a waypoint heading mode, so it is filtered out
+  of the route-level Aircraft Yaw list.
+- `startDistanceShoot` is offered but disabled on M30 waypoint routes, matching the observation in
+  §6 that it would not attach there, with the reason shown in the menu.
+
+### Deviations from plan
+- The plan specified **React Hook Form + Zod** for these panels. The inspector controls are live —
+  every change writes straight to the store so the map and stats update as you drag a slider —
+  which is not the submit-and-validate lifecycle RHF is built around. They are controlled inputs
+  with clamping at the control, and the server still validates every field with Zod on save. RHF
+  remains used where there is a real submit step (the save dialog, and the Phase 6 Create Route
+  dialog).
+- Gimbal tilt uses a −90°/+30° range. The reference recorded the default (0°) but not the travel
+  limits; this is the conventional gimbal pitch range and is flagged in a code comment.
+
+### Bugs found and fixed
+- The blocked-reason text for Take Photo said "Add End Recording first" while the action is
+  labelled "Stop Recording" — the instruction pointed at a menu entry that does not exist.
+
+### Verified
+Driven end-to-end in the browser against the live backend:
+- **Take Photo blocked while recording** (§6 rule 1): with recording active, Take Photo and Start
+  Recording are disabled and Stop Recording is enabled; after Stop Recording, Take Photo is
+  available again. The state machine walks the whole route, not just one waypoint.
+- **Interval rules**: End Interval Shot is disabled until an interval is running, and Start Timed
+  Interval Shot is disabled while one already is.
+- **Follow Route** (§6 rule 2): on, the lens chips are disabled and the panel says the lenses are
+  inherited; off, they become selectable.
+- **Photos stat** (§6 rule 3) recomputed live: 0 → 59 with a 3 s timed interval, back to 0 once
+  End Interval Shot was added.
+- Override toggles enable their fields; global speed 10 → 15 dropped the duration 3 m 16 s →
+  2 m 31 s; a uniform global altitude change correctly left 3-D distance unchanged.
+- Save round-trip: settings, `use_global_*` flags, action order and action params (including
+  `followRoute` and `interval`) all persisted and reloaded intact.
+- A locked wayline disables every panel input and the Save button, and shows the locked banner.
+- Production build succeeds (155 modules); console clean.
+
+### Next
+**Phase 5** — Area and Linear routes: polygon and centre-line drawing on the map, their settings
+panels from §8, and boustrophedon generation in `lib/routegen.js`.

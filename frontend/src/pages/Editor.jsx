@@ -1,8 +1,7 @@
 /**
- * Mission editor: map canvas on the right, waypoint list and stats on the left.
- *
- * Settings and action panels are added in Phase 4; this phase covers placing,
- * moving, reordering and deleting waypoints, the live statistics, and saving.
+ * Mission editor: waypoint list and stats on the left, map in the middle, and the
+ * inspector on the right — route settings, or the selected waypoint's settings
+ * and its actions.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -19,6 +18,9 @@ import MapCanvas from '../components/editor/MapCanvas.jsx';
 import StatsBar from '../components/editor/StatsBar.jsx';
 import WaypointList from '../components/editor/WaypointList.jsx';
 import SaveMissionDialog from '../components/editor/SaveMissionDialog.jsx';
+import GlobalSettingsPanel from '../components/editor/GlobalSettingsPanel.jsx';
+import WaypointPanel from '../components/editor/WaypointPanel.jsx';
+import ActionEditor from '../components/editor/ActionEditor.jsx';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import Spinner from '../components/ui/Spinner.jsx';
 import useMissionStore from '../store.js';
@@ -60,6 +62,12 @@ export default function Editor() {
   const [placementMode, setPlacementMode] = useState(null);
   const [fitTrigger, setFitTrigger] = useState(0);
   const [toast, setToast] = useState(null);
+  const [inspectorTab, setInspectorTab] = useState('route');
+
+  // Selecting a waypoint switches the inspector to it, as the reference does.
+  useEffect(() => {
+    if (selectedWaypoint != null) setInspectorTab('waypoint');
+  }, [selectedWaypoint]);
 
   // Load the requested mission, or start a blank one.
   useEffect(() => {
@@ -284,6 +292,54 @@ export default function Editor() {
           </div>
         )}
       </div>
+
+      {/* ------------------------------------------------------------ inspector */}
+      <aside className="flex w-80 shrink-0 flex-col border-l border-panel-700 bg-panel-900">
+        <div
+          role="tablist"
+          className="flex shrink-0 border-b border-panel-700 bg-panel-900 px-2 py-1.5"
+        >
+          {[
+            { id: 'route', label: 'Route settings' },
+            {
+              id: 'waypoint',
+              label:
+                selectedWaypoint != null ? `Waypoint ${selectedWaypoint + 1}` : 'Waypoint',
+            },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={inspectorTab === tab.id}
+              disabled={tab.id === 'waypoint' && selectedWaypoint == null}
+              onClick={() => setInspectorTab(tab.id)}
+              className={`min-w-0 flex-1 truncate rounded px-2 py-1 text-xs font-medium transition-colors disabled:opacity-40 ${
+                inspectorTab === tab.id
+                  ? 'bg-panel-700 text-slate-100'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {inspectorTab === 'route' ? (
+            <GlobalSettingsPanel disabled={mission.locked} />
+          ) : selectedWaypoint != null ? (
+            <>
+              <WaypointPanel index={selectedWaypoint} disabled={mission.locked} />
+              <ActionEditor waypointIndex={selectedWaypoint} disabled={mission.locked} />
+            </>
+          ) : (
+            <p className="px-3 py-6 text-center text-xs text-slate-500">
+              Select a waypoint to edit it.
+            </p>
+          )}
+        </div>
+      </aside>
 
       <SaveMissionDialog
         open={saveOpen}

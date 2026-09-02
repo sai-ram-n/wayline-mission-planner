@@ -31,6 +31,39 @@ const emptyMission = () => ({
 let localIdCounter = 0;
 const localId = () => `local-${Date.now()}-${(localIdCounter += 1)}`;
 
+/**
+ * The four attitude actions written by "synchronize attitude on new waypoint" and
+ * re-written by "Record Attitude" (feature-reference §4, §6).
+ *
+ * We have no 3D virtual aircraft to read a live attitude from, so the capture is
+ * seeded from the waypoint's own heading and any attitude values already on it,
+ * falling back to the documented defaults.
+ */
+function attitudeActions(waypoint = {}, settings = {}) {
+  const existing = {};
+  for (const action of waypoint.actions ?? []) existing[action.action_type] = action.params ?? {};
+
+  const heading =
+    existing.rotateYaw?.aircraftHeading ??
+    (waypoint.heading_mode === 'manually' ? (waypoint.heading_angle ?? 0) : 0);
+
+  return [
+    {
+      id: localId(),
+      action_type: 'rotateYaw',
+      params: {
+        aircraftHeading: heading,
+        aircraftPathMode: existing.rotateYaw?.aircraftPathMode ?? 'counterClockwise',
+      },
+    },
+    { id: localId(), action_type: 'gimbalYaw', params: { angle: existing.gimbalYaw?.angle ?? 0 } },
+    { id: localId(), action_type: 'gimbalTilt', params: { angle: existing.gimbalTilt?.angle ?? 0 } },
+    { id: localId(), action_type: 'zoom', params: { zoomRatio: existing.zoom?.zoomRatio ?? 5 } },
+  ];
+}
+
+const ATTITUDE_TYPES = ['rotateYaw', 'gimbalYaw', 'gimbalTilt', 'zoom'];
+
 export const useMissionStore = create((set, get) => ({
   mission: emptyMission(),
   meta: null,
@@ -211,12 +244,7 @@ export const useMissionStore = create((set, get) => ({
     // Mirrors the reference behaviour: with "synchronize attitude" on, a new
     // waypoint captures the current aircraft/gimbal/zoom attitude as actions.
     if (settings.syncAttitudeOnNewWaypoint && meta) {
-      waypoint.actions = [
-        { id: localId(), action_type: 'rotateYaw', params: { aircraftHeading: 0, aircraftPathMode: 'counterClockwise' } },
-        { id: localId(), action_type: 'gimbalYaw', params: { angle: 0 } },
-        { id: localId(), action_type: 'gimbalTilt', params: { angle: 0 } },
-        { id: localId(), action_type: 'zoom', params: { zoomRatio: 5 } },
-      ];
+      waypoint.actions = attitudeActions(waypoint, settings);
     }
 
     get().pushHistory();
@@ -317,6 +345,23 @@ export const useMissionStore = create((set, get) => ({
         return { ...w, actions };
       });
       return { mission: { ...s.mission, waypoints }, dirty: true };
+    });
+  },
+
+  /**
+   * "Record Attitude" — replaces this waypoint's attitude actions with a freshly
+   * captured set, leaving every other action untouched and in order.
+   */
+  recordCurrentAttitude(waypointIndex) {
+    get().pushHistory();
+    set((s) => {
+      const settings = s.mission.settings ?? {};
+      const waypoints = s.mission.waypoints.map((w, i) => {
+        if (i !== waypointIndex) return w;
+        const others = (w.actions ?? []).filter((a) => !ATTITUDE_TYPES.includes(a.action_type));
+        return { ...w, actions: [...attitudeActions(w, settings), ...others] };
+      });
+      return { mission: { ...s.mission, waypoints }, dirty: true, selectedAction: 0 };
     });
   },
 
