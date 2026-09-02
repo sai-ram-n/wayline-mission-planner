@@ -593,3 +593,23 @@ corrected.
 All eight phases are complete. Every phase is committed locally on `dev`; **none have been pushed**
 — there is still no GitHub credential on this machine (no `gh`, no credential helper, no token, no
 authorised SSH key). The commits are ready to push the moment one exists.
+
+---
+
+## Post-phase fix — Create Route dropped its parameters
+
+**Date:** 2026-09-02 · **Version:** 0.9.1
+
+Found while demonstrating the app end to end, not by a test.
+
+Creating a **Waypoint** route from the library's Create Route dialog opened the editor as
+"Untitled mission" and ignored the chosen aircraft. The editor's init effect only called
+`startRoute` when the requested route type differed from the mission already in the store, so with
+the default (`waypoint`) the query parameters were skipped entirely. It went unnoticed because
+every earlier test of the hand-off used `type=area` or `type=linear`, which always differ from the
+default.
+
+Landing on `/editor` without an id now always starts a fresh route from the query parameters.
+
+Verified: Create Route → Waypoint → Matrice 30 T now opens the editor titled "Riverbank
+Inspection" with the right aircraft, and the area and linear hand-offs still work.

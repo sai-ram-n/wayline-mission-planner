@@ -89,15 +89,18 @@ export default function Editor() {
     }
     const requested = searchParams.get('type');
     const routeType = ['waypoint', 'area', 'linear'].includes(requested) ? requested : 'waypoint';
-    if (mission.id || mission.route_type !== routeType || mission.waypoints.length) {
-      startRoute(routeType, {
-        series: searchParams.get('series'),
-        model: searchParams.get('model'),
-        payload: searchParams.get('payload'),
-        name: searchParams.get('name'),
-        folder: searchParams.get('folder'),
-      });
-    }
+
+    // Landing on /editor with no id always starts a fresh route. Comparing against
+    // the current mission first would skip the query parameters whenever they
+    // happen to match the defaults, silently dropping the name and aircraft the
+    // library's Create Route dialog passed in.
+    startRoute(routeType, {
+      series: searchParams.get('series'),
+      model: searchParams.get('model'),
+      payload: searchParams.get('payload'),
+      name: searchParams.get('name'),
+      folder: searchParams.get('folder'),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, searchParams]);
 
