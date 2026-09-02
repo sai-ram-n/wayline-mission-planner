@@ -37,8 +37,8 @@ products.
 | # | Phase | Status |
 |---|---|---|
 | 0 | Feature reference + project scaffold | ✅ Complete |
-| 1 | Backend scaffold + DB schema + REST API | ⬜ Not started |
-| 2 | Frontend scaffold + routing + store | ⬜ Not started |
+| 1 | Backend scaffold + DB schema + REST API | ✅ Complete |
+| 2 | Frontend scaffold + routing + store | ✅ Complete |
 | 3 | Waypoint editor — map canvas | ⬜ Not started |
 | 4 | Waypoint settings + action editing | ⬜ Not started |
 | 5 | Area + Linear route generation | ⬜ Not started |
@@ -154,3 +154,57 @@ in_progress → complete progression; assignment rows cascade away with their wa
 ### Next
 **Phase 2** — frontend scaffold: Vite + React + Tailwind, react-router for `/editor`, `/library`
 and `/drones`, the axios client, the Zustand mission store, and the app shell.
+
+---
+
+## Phase 2 — Frontend scaffold, routing and store ✅
+
+**Date:** 2026-09-02 · **Version:** 0.3.0
+
+### What was built
+- Vite + React + Tailwind, with a dark control-room palette (the map is the brightest thing on
+  screen, so the chrome stays dark) and reusable `.panel` / `.btn` / `.input` component classes.
+- `vite.config.js` — `@` and `@version` aliases, `fs.allow: ['..']` so the root `version.js` can be
+  imported, and an `/api` proxy to port 3001 so the browser needs no CORS or base URL.
+- `api.js` — axios client with an interceptor that turns backend failures into readable messages,
+  expanding Zod `details` into `field: message` text instead of "Request failed with status 400".
+- `store.js` — Zustand mission store: the mission being edited, dirty/loading/saving flags,
+  waypoint and action CRUD, selection state, a 50-step undo history, and `saveMission` which
+  creates or updates depending on whether the mission has an id. New waypoints auto-attach the four
+  attitude actions when `syncAttitudeOnNewWaypoint` is set, mirroring the reference behaviour.
+- `AppShell` with Editor / Library / Fleet navigation and a version badge; shared `Spinner`,
+  `ErrorBanner` and `EmptyState`; placeholder pages for the three routes.
+- `App.jsx` fetches `/api/meta` once at startup and shows a clear "start the backend" message if
+  the API is unreachable.
+
+### Key decisions
+- The frontend never restates enums or labels — they all come from `/api/meta`, fetched once.
+- Client-side ids (`local-…`) are assigned to unsaved waypoints and actions for React keys, and
+  stripped before the payload is sent so the server owns real ids.
+- Dragging a marker calls `moveWaypoint`, which deliberately does *not* push undo history; only
+  discrete edits do, so undo isn't flooded by drag frames.
+
+### Deviations from plan
+- Upgraded Vite 5 → 8 and react-router-dom 6 → 7 to clear two moderate npm advisories (esbuild
+  dev-server request forgery; react-router open redirect). `npm audit` is clean on both packages.
+- `server.host` defaults to `127.0.0.1` with a `VITE_HOST` override. Vite was binding `[::1]` only,
+  which some browsers cannot reach on `localhost`.
+
+### Verified
+Production build succeeds (97 modules). Dev server serves the app, the `/api` proxy reaches the
+backend, all three routes render, nav active state is correct, and the console is free of errors.
+
+### Incident
+While restarting the dev server I ran `pkill -f "vite"`, which killed three unrelated Vite dev
+servers belonging to other projects on this machine (ports 5173–5175). They could not be restored.
+All process management is now scoped to the project path
+(`pkill -f "wayline-mission-planner/frontend/…"`).
+
+### Notes
+The Chrome instance used for UI checks is in a different network namespace and cannot reach this
+host's loopback, so the dev server is started with `VITE_HOST=0.0.0.0` and viewed over the LAN
+address when a visual check is needed. Default remains loopback-only.
+
+### Next
+**Phase 3** — waypoint editor map canvas: react-leaflet with OSM tiles, click-to-add waypoints,
+draggable markers, the waypoint list with drag-reorder, and the live stats bar via Turf.
