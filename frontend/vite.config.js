@@ -17,7 +17,7 @@ export default defineConfig({
     // up listening on [::1] alone and browsers that resolve localhost to
     // 127.0.0.1 then fail to connect. Set VITE_HOST to expose it more widely
     // (e.g. 0.0.0.0 when the browser lives outside this host's network namespace).
-    host: process.env.VITE_HOST || '127.0.0.1',
+    host: true,
     port: 5173,
     fs: { allow: ['..'] },
     proxy: {

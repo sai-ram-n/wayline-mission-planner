@@ -39,7 +39,7 @@ products.
 | 0 | Feature reference + project scaffold | ✅ Complete |
 | 1 | Backend scaffold + DB schema + REST API | ✅ Complete |
 | 2 | Frontend scaffold + routing + store | ✅ Complete |
-| 3 | Waypoint editor — map canvas | ⬜ Not started |
+| 3 | Waypoint editor — map canvas | ✅ Complete |
 | 4 | Waypoint settings + action editing | ⬜ Not started |
 | 5 | Area + Linear route generation | ⬜ Not started |
 | 6 | Wayline library | ⬜ Not started |
@@ -208,3 +208,60 @@ address when a visual check is needed. Default remains loopback-only.
 ### Next
 **Phase 3** — waypoint editor map canvas: react-leaflet with OSM tiles, click-to-add waypoints,
 draggable markers, the waypoint list with drag-reorder, and the live stats bar via Turf.
+
+---
+
+## Phase 3 — Waypoint editor, map canvas ✅
+
+**Date:** 2026-09-02 · **Version:** 0.4.0
+
+### What was built
+- `components/editor/MapCanvas.jsx` — react-leaflet map on OpenStreetMap raster tiles (street and
+  terrain basemaps, attribution rendered as the OSM tile policy requires). Numbered `divIcon`
+  markers (`S` for the start, amber when selected), a casing + line polyline for the route,
+  draggable markers, click-to-add, zoom / fit-to-route / basemap controls, and a placement-mode
+  banner used when setting the reference takeoff point.
+- `components/editor/WaypointList.jsx` — reorderable waypoint list with per-row action icons and
+  a delete button.
+- `components/editor/StatsBar.jsx` — Flight Distance / Flight Duration / Waypoints / Photos, with
+  an optional Area metric for Phase 5.
+- `components/editor/SaveMissionDialog.jsx` — name + description prompt on first save.
+- `lib/geo.js` — Turf-backed distance, bearing and leg helpers, plus `computeStats` (an
+  interval-shot state machine for the photo count, hover durations and stop penalties),
+  formatters, `waypointBounds`, and `routeToSvgPath` for the Phase 6 library thumbnails.
+- `pages/Editor.jsx` — full wiring: load by `:id` or start blank, toolbar (Save / Undo / Reverse /
+  Clear), reference takeoff placement, toast, locked-wayline banner, and a `beforeunload` guard
+  while there are unsaved changes.
+
+### Key decisions
+- **Reordering uses pointer events, not the HTML5 drag-and-drop API.** Native DnD is not
+  keyboard-operable, does not work on touch, and cannot be driven by synthetic events. Rows are
+  also focusable and respond to `Alt+ArrowUp` / `Alt+ArrowDown`, so reordering never requires a
+  pointer.
+- Marker drags update position without pushing undo history; only discrete edits do.
+
+### Bugs found and fixed
+- **Reorder applied twice.** The pointerup handler committed the move *inside* a `setState`
+  updater. Updaters must be pure, and React StrictMode deliberately invokes them twice, so one
+  drag produced two reorders and a history entry for a state that never existed on screen. The
+  drag indices now live in refs, and the commit happens in the handler body. Re-verified: a
+  drag of index 3 onto index 1 turns `A,B,C,D` into exactly `A,D,B,C`, and a single undo restores
+  `A,B,C,D`.
+
+### Verified
+End-to-end in the browser against the live backend:
+- Click-to-add places waypoints; each auto-attaches the four attitude actions.
+- Marker drag moves a waypoint and the polyline and distance follow.
+- Pointer drag-reorder and `Alt+Arrow` reorder both perform exactly one move.
+- Delete, Reverse, Clear (with confirmation) and Undo all behave, including undo of a Clear.
+- Reference takeoff placement consumes the map click instead of adding a waypoint.
+- Save writes through: reloading the wayline returns 5 waypoints, 4 actions each, and the
+  `takeOffRefPoint` intact. The dirty indicator clears on save.
+- `beforeunload` blocks navigation while unsaved — confirmed by an actual blocked navigation.
+- Production build succeeds (150 modules); browser console clean on both a saved and a blank
+  mission.
+
+### Next
+**Phase 4** — per-waypoint settings panel and the action editor: the real enums and tooltip text
+from feature-reference §5–§6, per-waypoint override toggles, the *Take Photo blocked while
+recording* rule and the *Follow Route* lens-chip behaviour, built on RHF + Zod.
