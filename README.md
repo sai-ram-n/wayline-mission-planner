@@ -102,6 +102,9 @@ These are deliberate and documented rather than undiscovered.
 - **Four route types are out of scope.** Patrol, Slope, Geometric and Smart 3D Capture appear in
   the Create Route dialog marked unsupported. Patrol is fully documented in the feature reference;
   the other three were never explored.
+- **Merge is not implemented** — neither Merge Mapping Area nor the library's Merge action. The
+  source exploration never opened either dialog, so their behaviour is unknown and building them
+  would mean inventing it.
 - **The fleet and assignment model is our own design.** The source application's fleet and task
   modules were never explored, so this follows the project brief's simpler specification rather
   than guessing at them.

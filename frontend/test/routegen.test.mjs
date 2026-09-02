@@ -116,6 +116,38 @@ test('course angle rotates the pattern', () => {
   );
 });
 
+test('route start point moves S without changing coverage', () => {
+  const near = generateAreaRoute(RECT, { ...BASE, routeStartPoint: 'start' }, SENSOR);
+  const far = generateAreaRoute(RECT, { ...BASE, routeStartPoint: 'end' }, SENSOR);
+
+  assert.equal(near.waypoints.length, far.waypoints.length);
+  assert.equal(near.lines.length, far.lines.length);
+  // Same ground covered, different corner to begin from.
+  assert.ok(
+    Math.abs(pathLength(near.waypoints) - pathLength(far.waypoints)) < 1,
+    'coverage distance changed'
+  );
+  const moved =
+    Math.abs(near.waypoints[0].lat - far.waypoints[0].lat) > 1e-9 ||
+    Math.abs(near.waypoints[0].lng - far.waypoints[0].lng) > 1e-9;
+  assert.ok(moved, 'the start point did not move');
+});
+
+test('flipping the area reverses the line order', () => {
+  const plain = generateAreaRoute(RECT, BASE, SENSOR);
+  const flipped = generateAreaRoute(RECT, { ...BASE, flipArea: true }, SENSOR);
+
+  assert.equal(plain.lines.length, flipped.lines.length);
+  // The first line of one is the last line of the other.
+  const firstOfPlain = plain.lines[0];
+  const lastOfFlipped = flipped.lines[flipped.lines.length - 1];
+  assert.ok(
+    Math.abs(firstOfPlain[0][0] - lastOfFlipped[0][0]) < 1e-9 ||
+      Math.abs(firstOfPlain[0][0] - lastOfFlipped[1][0]) < 1e-9,
+    'flip did not reverse the scan order'
+  );
+});
+
 test('margin expands the surveyed area', () => {
   const plain = generateAreaRoute(RECT, BASE, SENSOR);
   const margined = generateAreaRoute(RECT, { ...BASE, margin: 50 }, SENSOR);

@@ -32,6 +32,8 @@ const HINTS = {
   includeCenterLine: 'Adds one extra pass directly along the centre line.',
   zigzag: 'Zigzag fills the whole corridor. Single Route flies the centre line only.',
   photoMode: 'Whether captures are triggered on a time interval or a distance interval.',
+  startPoint: 'Which end of the survey the route begins from. Coverage is unchanged.',
+  flip: 'Fly the survey lines in the opposite order.',
 };
 
 export default function MappingSettingsPanel({ disabled = false, stats }) {
@@ -54,6 +56,8 @@ export default function MappingSettingsPanel({ disabled = false, stats }) {
       height: 3000,
     };
   const { lineSpacing, photoSpacing, widthM } = footprint(settings, sensor);
+  const hasIrSensor = lenses.includes('ir') && lenses.length > 1;
+  const gsdLinked = settings.gsdLinked !== false;
 
   /** Left and right extensions move together while the link is on (§8.2). */
   const linked = settings.extensionsLinked !== false;
@@ -95,16 +99,42 @@ export default function MappingSettingsPanel({ disabled = false, stats }) {
         )}
 
         <NumberStepper
-          label={isLinear ? 'GSD (Visible)' : 'GSD'}
+          label={hasIrSensor ? `GSD (${LENS_LABELS[lenses[0]] ?? 'Visible'})` : 'GSD'}
           hint={HINTS.gsd}
           value={settings.gsd}
-          onChange={set('gsd')}
+          onChange={(gsd) =>
+            gsdLinked ? setSettings({ gsd, gsdIr: gsd }) : setSettings({ gsd })
+          }
           min={0.1}
           max={100}
           steps={[0.1, 1]}
           unit="cm/px"
           disabled={disabled}
         />
+
+        {/* A second GSD for the thermal sensor, coupled by a link toggle (§8.2). */}
+        {hasIrSensor && (
+          <>
+            <ToggleField
+              label="Link GSD values"
+              value={gsdLinked}
+              onChange={(v) =>
+                setSettings(v ? { gsdLinked: true, gsdIr: settings.gsd } : { gsdLinked: false })
+              }
+              disabled={disabled}
+            />
+            <NumberStepper
+              label="GSD (IR)"
+              value={settings.gsdIr ?? settings.gsd}
+              onChange={set('gsdIr')}
+              min={0.1}
+              max={100}
+              steps={[0.1, 1]}
+              unit="cm/px"
+              disabled={disabled || gsdLinked}
+            />
+          </>
+        )}
 
         {/* Derived numbers, so the settings above are not a black box. */}
         <dl className="rounded-md bg-panel-800 px-2 py-1.5 text-[10px] leading-relaxed text-slate-400">
@@ -218,6 +248,26 @@ export default function MappingSettingsPanel({ disabled = false, stats }) {
         )}
 
         <SegmentedTabs
+          label="Route Start Point"
+          hint={HINTS.startPoint}
+          value={settings.routeStartPoint ?? 'start'}
+          options={[
+            { value: 'start', label: 'Near corner' },
+            { value: 'end', label: 'Far corner' },
+          ]}
+          onChange={set('routeStartPoint')}
+          disabled={disabled}
+        />
+
+        <ToggleField
+          label="Flip mapping area"
+          hint={HINTS.flip}
+          value={!!settings.flipArea}
+          onChange={set('flipArea')}
+          disabled={disabled}
+        />
+
+        <SegmentedTabs
           label="Waypoint Altitude Mode"
           value={settings.heightMode}
           options={meta.heightModes.map((value) => ({ value, label: value }))}
@@ -260,10 +310,24 @@ export default function MappingSettingsPanel({ disabled = false, stats }) {
           />
         )}
 
-        <p className="rounded-md border border-amber-500/25 bg-amber-500/5 px-2 py-1.5 text-[10px] leading-snug text-amber-300/90">
-          Terrain following uses global elevation data, which is for reference only. Fly with
-          caution.
-        </p>
+        {/*
+          Terrain Follow File Management / Real-Time Terrain Follow (§8.1, §8.2).
+          Shown but disabled: there is no elevation service wired up, so offering a
+          working toggle would imply terrain data we do not have.
+        */}
+        <div className="rounded-md border border-amber-500/25 bg-amber-500/5 p-2">
+          <ToggleField
+            label="Real-Time Terrain Follow"
+            value={false}
+            onChange={() => {}}
+            disabled
+          />
+          <p className="mt-1.5 text-[10px] leading-snug text-amber-300/90">
+            Terrain following needs an elevation source, which this build does not include.
+            Altitudes are flown as entered. Global elevation data is for reference only in any
+            case — fly with caution.
+          </p>
+        </div>
       </Section>
 
       {/* ---------------------------------------------------------- advanced */}

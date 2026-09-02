@@ -552,5 +552,29 @@ using the §7 schema, and import a `.kmz` back into a wayline.
 
 ---
 
+## 12. Build status against this document
+
+Added 2026-09-02 after auditing the shipped code against §11.
+
+**Built.** §11.1 in full (including the four display settings and the keyboard shortcuts that
+survive the click-to-add adaptation), §11.2 in full (including editable coordinates and all four
+override toggles), §11.3, §11.4, §11.5 (bar the two items below), §11.6, §11.7, §11.8.
+
+**Deliberately not built, with the reason:**
+
+| Item | Why |
+|---|---|
+| Virtual-flight / FPV authoring (§4) and the Snapshot Preview + AI Spot-Check (§6) | Need a 3D terrain and scene service this build has no access to. Replaced by click-to-add authoring, as §4 already records. |
+| Patrol, Slope, Geometric, Smart 3D Capture (§1) | Out of scope by agreement; visibly marked unsupported in the Create Route dialog. Only Patrol was ever explored (§8.3). |
+| **Merge Mapping Area** (§8.2) and the library's **Merge** action (§2) | §10.4 records that these dialogs were never exercised. Their behaviour is unknown, so building them would mean inventing semantics rather than replicating them. |
+| Real-time terrain following (§8.1, §8.2) | No elevation service. The control is shown disabled with an explanation rather than faked. |
+| The fifth *Waypoint Type* label as a separate entry | Two UI labels share one WPML enum (§7). Both wordings are kept in a single combined label rather than presenting a choice that cannot be serialised. |
+
+**Deviation:** *Display Waypoints* defaults **on**, unlike the reference where all four display
+toggles default off. Waypoint markers are how a waypoint is selected and dragged here, so starting
+with them hidden would make the editor unusable.
+
+---
+
 *Compiled 2026-09-01 from direct exploration of the live Wayline module. Behaviour marked
 "verified" was observed; anything uncertain is flagged inline or listed in §10.*

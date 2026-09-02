@@ -54,6 +54,11 @@ export const settingsSchema = z
     elevationOptimization: z.boolean().optional(),
     boundaryOptimization: z.boolean().optional(),
     customCameraAngle: z.boolean().optional(),
+    routeStartPoint: z.enum(['start', 'end']).optional(),
+    flipArea: z.boolean().optional(),
+    realTimeTerrainFollow: z.boolean().optional(),
+    gsdIr: z.number().min(0.1).max(100).optional(),
+    gsdLinked: z.boolean().optional(),
 
     // linear routes
     zigzag: z.boolean().optional(),

@@ -10,6 +10,7 @@
 import { point, lineString } from '@turf/helpers';
 import distance from '@turf/distance';
 import bearing from '@turf/bearing';
+import destination from '@turf/destination';
 import length from '@turf/length';
 
 /** Ground distance between two waypoints, in metres. */
@@ -31,6 +32,18 @@ export function legDistance(a, b) {
 export function bearingBetween(a, b) {
   const deg = bearing(point([a.lng, a.lat]), point([b.lng, b.lat]));
   return (deg + 360) % 360;
+}
+
+/**
+ * A point `metres` away from lat/lng along a compass bearing, as `[lat, lng]`.
+ * Used for the short orientation and altitude cue lines on the map.
+ */
+export function offsetLatLng(lat, lng, bearingDegrees, metres) {
+  const target = destination(point([lng, lat]), metres / 1000, bearingDegrees, {
+    units: 'kilometers',
+  });
+  const [outLng, outLat] = target.geometry.coordinates;
+  return [outLat, outLng];
 }
 
 /** Total ground path length in metres. */

@@ -13,6 +13,8 @@ import {
   LuHouse,
   LuCircleAlert,
   LuPencilRuler,
+  LuRotateCcw,
+  LuX,
 } from 'react-icons/lu';
 
 import MapCanvas from '../components/editor/MapCanvas.jsx';
@@ -23,6 +25,10 @@ import GlobalSettingsPanel from '../components/editor/GlobalSettingsPanel.jsx';
 import WaypointPanel from '../components/editor/WaypointPanel.jsx';
 import ActionEditor from '../components/editor/ActionEditor.jsx';
 import MappingSettingsPanel from '../components/editor/MappingSettingsPanel.jsx';
+import DisplaySettingsMenu, {
+  loadDisplaySettings,
+} from '../components/editor/DisplaySettingsMenu.jsx';
+import useEditorShortcuts, { SHORTCUTS } from '../hooks/useEditorShortcuts.js';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import Spinner from '../components/ui/Spinner.jsx';
 import useMissionStore from '../store.js';
@@ -73,6 +79,8 @@ export default function Editor() {
   const [draft, setDraft] = useState([]);
   const [generated, setGenerated] = useState(null);
   const [searchParams] = useSearchParams();
+  const [display, setDisplay] = useState(loadDisplaySettings);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   // Selecting a waypoint switches the inspector to it, as the reference does.
   useEffect(() => {
@@ -167,6 +175,12 @@ export default function Editor() {
     setToast(message);
     setTimeout(() => setToast(null), 2200);
   }, []);
+
+  // Shortcuts are disabled while a dialog owns the keyboard.
+  useEditorShortcuts({
+    enabled: !saveOpen && !shortcutsOpen,
+    onShowHelp: () => setShortcutsOpen(true),
+  });
 
   const stats = useMemo(
     () => computeStats(mission.waypoints, mission.settings),
@@ -375,6 +389,13 @@ export default function Editor() {
           >
             <LuTrash2 className="h-3.5 w-3.5" />
           </button>
+          <DisplaySettingsMenu
+            value={display}
+            onChange={setDisplay}
+            syncAttitude={mission.settings?.syncAttitudeOnNewWaypoint}
+            onSyncAttitudeChange={(v) => setSettings({ syncAttitudeOnNewWaypoint: v })}
+            disabled={mission.locked}
+          />
         </div>
 
         {/* Route type — only while the mission is still empty and unsaved. */}
@@ -444,21 +465,38 @@ export default function Editor() {
           </div>
         )}
 
-        <div className="border-b border-panel-700 px-2 py-1.5">
+        <div className="flex gap-1 border-b border-panel-700 px-2 py-1.5">
           <button
             type="button"
             onClick={() => setPlacementMode(placementMode === 'takeoff' ? null : 'takeoff')}
-            className={`btn w-full px-2 py-1 text-xs ${
+            disabled={mission.locked}
+            className={`btn min-w-0 flex-1 px-2 py-1 text-xs ${
               placementMode === 'takeoff'
                 ? 'bg-accent text-white'
-                : takeoffPoint
-                  ? 'bg-panel-700 text-slate-300 hover:bg-panel-600'
-                  : 'bg-panel-700 text-slate-300 hover:bg-panel-600'
+                : 'bg-panel-700 text-slate-300 hover:bg-panel-600'
             }`}
           >
-            <LuHouse className="h-3.5 w-3.5" />
-            {takeoffPoint ? 'Takeoff point set' : 'Set reference takeoff point'}
+            <LuHouse className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">
+              {takeoffPoint ? 'Takeoff point set' : 'Set reference takeoff point'}
+            </span>
           </button>
+          {/* "Reset Takeoff Point" (§5) — the point can be cleared once set. */}
+          {takeoffPoint && (
+            <button
+              type="button"
+              onClick={() => {
+                setSettings({ takeOffRefPoint: null });
+                setPlacementMode(null);
+                showToast('Takeoff point reset');
+              }}
+              disabled={mission.locked}
+              title="Reset Takeoff Point"
+              className="btn-ghost shrink-0 p-1.5"
+            >
+              <LuRotateCcw className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -507,6 +545,7 @@ export default function Editor() {
           onFinishDrawing={handleFinishDrawing}
           onCancelDrawing={handleCancelDrawing}
           onMoveGeometryVertex={handleMoveGeometryVertex}
+          display={display}
         />
 
         {mission.locked && (
@@ -578,6 +617,39 @@ export default function Editor() {
           )}
         </div>
       </aside>
+
+      {shortcutsOpen && (
+        <div
+          className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShortcutsOpen(false)}
+        >
+          <div className="panel w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="panel-header">
+              <h2 className="text-sm font-semibold text-slate-100">Keyboard shortcuts</h2>
+              <button
+                type="button"
+                onClick={() => setShortcutsOpen(false)}
+                className="btn-ghost p-1"
+                aria-label="Close"
+              >
+                <LuX className="h-4 w-4" />
+              </button>
+            </div>
+            <dl className="space-y-1.5 p-4">
+              {SHORTCUTS.map((shortcut) => (
+                <div key={shortcut.keys} className="flex items-baseline gap-3">
+                  <dt className="w-24 shrink-0 font-mono text-[11px] text-slate-300">
+                    {shortcut.keys}
+                  </dt>
+                  <dd className="min-w-0 flex-1 text-[11px] text-slate-400">
+                    {shortcut.description}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+      )}
 
       <SaveMissionDialog
         open={saveOpen}

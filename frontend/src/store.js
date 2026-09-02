@@ -356,6 +356,23 @@ export const useMissionStore = create((set, get) => ({
     set({ selectedWaypoint: waypointIndex, selectedAction: newIndex });
   },
 
+  /** Insert an action at a specific position, used by the Shift+F shortcut. */
+  insertAction(waypointIndex, actionIndex, actionType, params = {}) {
+    get().pushHistory();
+    let placed = actionIndex;
+    set((s) => {
+      const waypoints = s.mission.waypoints.map((w, i) => {
+        if (i !== waypointIndex) return w;
+        const actions = [...w.actions];
+        placed = Math.min(Math.max(actionIndex, 0), actions.length);
+        actions.splice(placed, 0, { id: localId(), action_type: actionType, params });
+        return { ...w, actions };
+      });
+      return { mission: { ...s.mission, waypoints }, dirty: true };
+    });
+    set({ selectedWaypoint: waypointIndex, selectedAction: placed });
+  },
+
   updateAction(waypointIndex, actionIndex, params) {
     set((s) => {
       const waypoints = s.mission.waypoints.map((w, i) => {

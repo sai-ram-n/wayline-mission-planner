@@ -78,7 +78,7 @@ export function footprint(settings = {}, sensor = { width: 4000, height: 3000 })
  * crossings with the boundary are paired into inside-segments — which keeps
  * concave areas correct rather than assuming two crossings per line.
  */
-function fillPolygon(polygon, lineSpacing, courseAngle) {
+function fillPolygon(polygon, lineSpacing, courseAngle, { flip = false, startPoint = 'start' } = {}) {
   const pivot = turf.centroid(polygon);
   const rotated = turf.transformRotate(polygon, -courseAngle, { pivot });
   const [minX, minY, maxX, maxY] = turf.bbox(rotated);
@@ -114,8 +114,16 @@ function fillPolygon(polygon, lineSpacing, courseAngle) {
 
   if (!segments.length) return [];
 
+  // "Flip Mapping Area" (§8.1): fly the lines in the opposite order, which moves
+  // the start to the far side of the area.
+  const scanned = flip ? [...segments].reverse() : segments;
+
   // Serpentine: reverse every other line so the ends join up.
-  const ordered = segments.map(([a, b], i) => (i % 2 ? [b, a] : [a, b]));
+  let ordered = scanned.map(([a, b], i) => (i % 2 ? [b, a] : [a, b]));
+
+  // "Route Start Point" (§8.1): start from the other end of each line, which
+  // puts Point S on the opposite corner without changing the coverage.
+  if (startPoint === 'end') ordered = ordered.map(([a, b]) => [b, a]);
 
   // Rotate the whole set back into place in one pass.
   const back = turf.transformRotate(
@@ -206,7 +214,10 @@ export function generateAreaRoute(vertices, settings = {}, sensor) {
   }
 
   const { lineSpacing, photoSpacing } = footprint(settings, sensor);
-  const lines = fillPolygon(target, lineSpacing, Number(settings.courseAngle ?? 0));
+  const lines = fillPolygon(target, lineSpacing, Number(settings.courseAngle ?? 0), {
+    flip: !!settings.flipArea,
+    startPoint: settings.routeStartPoint ?? 'start',
+  });
 
   const positions = lines.flat();
   let waypoints = positions.map((position, i) => makeWaypoint(position, settings, i));
@@ -295,7 +306,10 @@ export function generateLinearRoute(vertices, settings = {}, sensor) {
     const filled =
       settings.zigzag === false
         ? [coords]
-        : fillPolygon(corridor, lineSpacing, courseAngle);
+        : fillPolygon(corridor, lineSpacing, courseAngle, {
+            flip: !!settings.flipArea,
+            startPoint: settings.routeStartPoint ?? 'start',
+          });
 
     allLines.push(...filled);
 

@@ -30,6 +30,7 @@ export default function WaypointPanel({ index, disabled = false }) {
   const mission = useMissionStore((s) => s.mission);
   const meta = useMissionStore((s) => s.meta);
   const updateWaypoint = useMissionStore((s) => s.updateWaypoint);
+  const moveWaypoint = useMissionStore((s) => s.moveWaypoint);
 
   const waypoint = mission.waypoints[index];
   if (!waypoint || !meta) return null;
@@ -47,22 +48,33 @@ export default function WaypointPanel({ index, disabled = false }) {
   return (
     <div className="text-slate-200">
       <Section title={`Waypoint ${index + 1}`}>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <span className="label">Latitude</span>
-            <p className="truncate font-mono text-[11px] text-slate-300">
-              {waypoint.lat.toFixed(6)}
-            </p>
-          </div>
-          <div>
-            <span className="label">Longitude</span>
-            <p className="truncate font-mono text-[11px] text-slate-300">
-              {waypoint.lng.toFixed(6)}
-            </p>
-          </div>
-        </div>
+        {/*
+          Editable coordinates, matching the reference's waypoint edit mode (§4),
+          where longitude and latitude become inputs alongside speed and altitude.
+          `moveWaypoint` is the same action the marker drag uses.
+        */}
+        <NumberStepper
+          label="Latitude"
+          value={waypoint.lat}
+          onChange={(lat) => moveWaypoint(index, lat, waypoint.lng)}
+          min={-90}
+          max={90}
+          steps={[0.0001]}
+          decimals={7}
+          disabled={disabled}
+        />
+        <NumberStepper
+          label="Longitude"
+          value={waypoint.lng}
+          onChange={(lng) => moveWaypoint(index, waypoint.lat, lng)}
+          min={-180}
+          max={180}
+          steps={[0.0001]}
+          decimals={7}
+          disabled={disabled}
+        />
         <p className="text-[10px] leading-snug text-slate-500">
-          Drag the marker on the map to reposition this waypoint.
+          Or drag the marker on the map to reposition this waypoint.
         </p>
       </Section>
 
@@ -159,6 +171,8 @@ export default function WaypointPanel({ index, disabled = false }) {
               onChange={set('poi_lat')}
               min={-90}
               max={90}
+              steps={[0.0001]}
+              decimals={7}
               disabled={disabled}
             />
             <NumberStepper
@@ -167,6 +181,8 @@ export default function WaypointPanel({ index, disabled = false }) {
               onChange={set('poi_lng')}
               min={-180}
               max={180}
+              steps={[0.0001]}
+              decimals={7}
               disabled={disabled}
             />
             <NumberStepper

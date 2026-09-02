@@ -12,8 +12,15 @@ import { LuInfo, LuMinus, LuPlus } from 'react-icons/lu';
 
 const clamp = (value, min, max) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, value));
 
-/** Round away float noise from repeated stepping (0.1 + 0.2 and friends). */
-const tidy = (value) => Math.round(value * 1000) / 1000;
+/**
+ * Round away float noise from repeated stepping (0.1 + 0.2 and friends).
+ * `decimals` must be raised for values that need real precision — coordinates
+ * would be quantised to ~110 m at the default of 3.
+ */
+const tidy = (value, decimals = 3) => {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+};
 
 /* -------------------------------------------------------------------- tooltip */
 
@@ -71,6 +78,8 @@ export function NumberStepper({
   steps = [1],
   unit,
   disabled = false,
+  /** Decimal places kept when committing — raise for coordinates. */
+  decimals = 3,
 }) {
   const id = useId();
   const [draft, setDraft] = useState(String(value ?? ''));
@@ -87,13 +96,13 @@ export function NumberStepper({
       setDraft(String(value ?? ''));
       return;
     }
-    const next = tidy(clamp(parsed, min, max));
+    const next = tidy(clamp(parsed, min, max), decimals);
     setDraft(String(next));
     if (next !== value) onChange(next);
   };
 
   const bump = (delta) => {
-    const next = tidy(clamp((Number(value) || 0) + delta, min, max));
+    const next = tidy(clamp((Number(value) || 0) + delta, min, max), decimals);
     if (next !== value) onChange(next);
     setDraft(String(next));
   };

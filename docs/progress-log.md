@@ -613,3 +613,52 @@ Landing on `/editor` without an id now always starts a fresh route from the quer
 
 Verified: Create Route → Waypoint → Matrice 30 T now opens the editor titled "Riverbank
 Inspection" with the right aircraft, and the area and linear hand-offs still work.
+
+---
+
+## Feature-completeness pass — closing the §11 gaps ✅
+
+**Date:** 2026-09-02 · **Version:** 0.10.0
+
+Prompted by the user asking whether every feature in the reference had actually been built. An
+audit of the shipped code against §11 found seven specified controls that were never implemented.
+Five are now built, two are deliberately declined with the reason recorded in the new §12.
+
+### Built
+- **Display settings** (§3) — `components/editor/DisplaySettingsMenu.jsx`: Display Waypoints,
+  Display Gimbal Orientation, Display Vertical Lines, Bold Line Mode, behind a gear button, plus
+  the synchronize-attitude toggle. The four view toggles are held outside the mission store and
+  persisted in `localStorage`, so they never mark the mission dirty.
+- **Keyboard shortcuts** (§3, §4) — `hooks/useEditorShortcuts.js`: `↑`/`↓` waypoints, `←`/`→`
+  actions, `F` / `Shift`+`F` attach or insert Take Photo (Fixed Angle), `Delete`, and `?` for a
+  help overlay. Events from form controls are ignored so typing and the existing `Alt`+arrow
+  reorder are unaffected. Needed one new store action, `insertAction`.
+- **Reset Takeoff Point** (§5) — the point can now be cleared, not just set.
+- **Fifth Waypoint Type label** (§5) — both wordings that share
+  `toPointAndPassWithContinuityCurvature` now appear in one combined label.
+- **Editable coordinates** (§4) — latitude and longitude are steppers wired to `moveWaypoint`.
+- **Mapping controls** (§8) — Route Start Point, Flip Mapping Area, linked GSD(IR) for
+  dual-sensor models, and a disabled Real-Time Terrain Follow with an explanation.
+
+### Declined, recorded in feature-reference §12
+Merge Mapping Area and the library's Merge action: §10.4 records that neither dialog was ever
+exercised, so their behaviour is unknown and building them would mean inventing semantics.
+
+### Bug found while implementing
+`NumberStepper` rounded every committed value to 3 decimal places, which was fine for altitudes
+and speeds but would have quantised a latitude to roughly 110 m. It now takes a `decimals` prop;
+coordinate fields, including the POI coordinates that were already shipping, use 7.
+
+### Deviation
+*Display Waypoints* defaults on rather than off. Markers are how a waypoint is selected and
+dragged, so the reference's all-off default would make the editor unusable.
+
+### Verified
+- `frontend`: 18 tests (2 new — Route Start Point moves S without changing coverage, Flip reverses
+  the scan order). `backend`: 10 tests. Both green; production build clean.
+- Browser: all four display toggles change the map and, on a saved mission, leave it **clean**,
+  while the synchronize-attitude toggle correctly marks it dirty. Shortcuts step waypoints and
+  actions, `F` attaches, `?` opens the overlay — and typing in a numeric field fires none of them.
+  Route Start Point moved S from x=738 to x=1058 and Flip moved it from y=541 to y=350, with the
+  flight distance unchanged at 4.58 km in both cases. Latitude stepped by exactly 0.0001 keeping
+  7 decimals. Console clean.

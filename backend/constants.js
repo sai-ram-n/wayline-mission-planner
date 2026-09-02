@@ -131,7 +131,14 @@ export const GIMBAL_PITCH_MODE_LABELS = {
   usePointSetting: 'For Each Waypoint',
 };
 
-/** The five Waypoint Type options, in the order the source dropdown lists them. */
+/**
+ * Waypoint Type options, in the order the source dropdown lists them.
+ *
+ * The reference dropdown shows five labels but the WPML enum has four values:
+ * "Turns before waypoint. Flies through" and "Curved route. Aircraft continues"
+ * both serialise to `toPointAndPassWithContinuityCurvature` (feature-reference §7).
+ * The combined label below keeps both wordings visible rather than dropping one.
+ */
 export const TURN_MODES = [
   'coordinateTurn',
   'toPointAndStopWithDiscontinuityCurvature',
@@ -141,7 +148,8 @@ export const TURN_MODES = [
 export const TURN_MODE_LABELS = {
   coordinateTurn: 'Coordinated turn. Skips waypoint',
   toPointAndStopWithDiscontinuityCurvature: 'Straight route. Aircraft stops',
-  toPointAndPassWithContinuityCurvature: 'Turns before waypoint. Flies through',
+  toPointAndPassWithContinuityCurvature:
+    'Turns before waypoint. Flies through / Curved route. Aircraft continues',
   toPointAndStopWithContinuityCurvature: 'Curved route. Aircraft stops',
 };
 

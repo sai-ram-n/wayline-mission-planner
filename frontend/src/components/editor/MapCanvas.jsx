@@ -25,7 +25,7 @@ import {
   MAP_COLORS,
   TILE_LAYERS,
 } from '../../lib/constants.js';
-import { bearingBetween, waypointBounds } from '../../lib/geo.js';
+import { bearingBetween, offsetLatLng, waypointBounds } from '../../lib/geo.js';
 
 /**
  * A numbered waypoint pin. Built as a divIcon so the index is real text —
@@ -138,6 +138,8 @@ export default function MapCanvas({
   onMoveGeometryVertex,
   // Preview mode: no editing, used by the library's map panel.
   readOnly = false,
+  // Flight route display settings (§3). All default off.
+  display = {},
 }) {
   const [basemap, setBasemap] = useState('street');
   const mapRef = useRef(null);
@@ -277,8 +279,22 @@ export default function MapCanvas({
         {positions.length > 1 && (
           <>
             {/* Casing beneath the route keeps it readable over pale tiles. */}
-            <Polyline positions={positions} pathOptions={{ color: MAP_COLORS.routeCasing, weight: 7, opacity: 0.85 }} />
-            <Polyline positions={positions} pathOptions={{ color: MAP_COLORS.route, weight: 3, opacity: 1 }} />
+            <Polyline
+              positions={positions}
+              pathOptions={{
+                color: MAP_COLORS.routeCasing,
+                weight: display.boldLineMode ? 12 : 7,
+                opacity: 0.85,
+              }}
+            />
+            <Polyline
+              positions={positions}
+              pathOptions={{
+                color: MAP_COLORS.route,
+                weight: display.boldLineMode ? 6 : 3,
+                opacity: 1,
+              }}
+            />
           </>
         )}
 
@@ -290,7 +306,56 @@ export default function MapCanvas({
           </Marker>
         )}
 
-        {waypoints.map((waypoint, index) => (
+        {/*
+          Gimbal orientation ticks (§3). Drawn from the waypoint's gimbalYaw action
+          where it has one, falling back to the route heading, so the tick shows
+          roughly where the payload is looking.
+        */}
+        {display.displayGimbalOrientation &&
+          waypoints.map((waypoint, index) => {
+            const gimbal = (waypoint.actions ?? []).find((a) => a.action_type === 'gimbalYaw');
+            const yaw = Number(gimbal?.params?.angle ?? 0);
+            const heading =
+              index < waypoints.length - 1
+                ? bearingBetween(waypoint, waypoints[index + 1])
+                : index > 0
+                  ? bearingBetween(waypoints[index - 1], waypoint)
+                  : 0;
+            return (
+              <Polyline
+                key={`gimbal-${waypoint.id ?? index}`}
+                positions={[
+                  [waypoint.lat, waypoint.lng],
+                  offsetLatLng(waypoint.lat, waypoint.lng, heading + yaw, 45),
+                ]}
+                pathOptions={{ color: MAP_COLORS.markerSelected, weight: 2, opacity: 0.9 }}
+              />
+            );
+          })}
+
+        {/*
+          Vertical drop lines (§3). Without an elevation service there is no true
+          ground point, so these are a fixed-length stub southward from each
+          waypoint — an altitude cue, not a survey-accurate projection.
+        */}
+        {display.displayVerticalLines &&
+          waypoints.map((waypoint, index) => (
+            <Polyline
+              key={`vert-${waypoint.id ?? index}`}
+              positions={[
+                [waypoint.lat, waypoint.lng],
+                offsetLatLng(waypoint.lat, waypoint.lng, 180, 25),
+              ]}
+              pathOptions={{
+                color: MAP_COLORS.route,
+                weight: 1.5,
+                opacity: 0.55,
+                dashArray: '3 3',
+              }}
+            />
+          ))}
+
+        {display.displayWaypoints === false ? null : waypoints.map((waypoint, index) => (
           <Marker
             key={waypoint.id ?? index}
             position={[waypoint.lat, waypoint.lng]}
