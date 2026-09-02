@@ -51,9 +51,9 @@ export const MAP_COLORS = {
   generated: '#2ecc71',
 };
 
-/** Default map view when a mission has no waypoints yet. */
-export const DEFAULT_CENTER = [-37.8079, 145.2841];
-export const DEFAULT_ZOOM = 16;
+/** Default map view when a mission has no waypoints yet — Hyderabad, Telangana. */
+export const DEFAULT_CENTER = [17.385, 78.4867];
+export const DEFAULT_ZOOM = 14;
 
 /**
  * OpenStreetMap raster tiles. No API key required; attribution is mandatory

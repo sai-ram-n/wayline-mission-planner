@@ -662,3 +662,53 @@ dragged, so the reference's all-off default would make the editor unusable.
   Route Start Point moved S from x=738 to x=1058 and Flip moved it from y=541 to y=350, with the
   flight distance unchanged at 4.58 km in both cases. Latitude stepped by exactly 0.0001 keeping
   7 decimals. Console clean.
+
+---
+
+## UI pass — toggle fix, Hyderabad default, production polish
+
+**Date:** 2026-09-02 · **Version:** 0.10.1
+
+### 1. Toggle switches were broken
+The knob was `absolute` with no `left` anchor. A button centres its content, so the knob started
+mid-track and the "on" transform pushed it **clean outside the track and over the label** —
+measured at 1575..1587 against a track ending at 1575, which is why "Link left and right
+extensions" rendered as "ink left and right extensions". The knob is now anchored with
+`left`/`top` so its travel is explicit, the control is larger (h-5 w-9 with a 3.5 knob), and the
+label is clickable.
+
+### 2. Default map centre
+Now Hyderabad, Telangana (17.385, 78.4867) at zoom 14, replacing the Melbourne coordinates used
+during exploration.
+
+### 3. Production polish
+- **Dark scrollbars.** The default light track cut a bright stripe through every panel — the most
+  obvious unfinished tell in a dark app.
+- **Styled range inputs and hidden native number spinners**, which duplicated our own steppers.
+- **Dark `<option>` lists**, which rendered light in every dropdown.
+- **Library map is now always mounted**, matching §2 ("a left panel beside a full-bleed map").
+  Previously an unselected route left a large empty void; the hint is now a floating card over the
+  map.
+- **Disabled map controls stay opaque.** `disabled:opacity-40` faded the whole button and let the
+  map show through, so the fit-to-route control looked like a rendering fault rather than a
+  disabled button.
+- Favicon inlined as a data URI (no request, works offline), `theme-color`/`color-scheme` meta,
+  and a dark background on `<html>` so first paint no longer flashes white.
+- Active nav item gets an accent underline; inputs get hover and focus-ring states; stats labels
+  wrap instead of truncating ("Flight Distance" and "Flight Duration" differ only in the last
+  word, so an ellipsis made them identical).
+
+### Bugs found during the pass
+- **`NumberStepper` displayed raw floats** — a latitude showed as `17.393152615154893`. The field
+  now renders at its own precision.
+- **Hiding waypoint markers persisted across sessions.** Markers are the only way to select or
+  drag a waypoint, so a forgotten toggle left the editor looking permanently broken. That one
+  setting is no longer persisted; the other three still are.
+- **A Tailwind config change did not reach the dev server**, so `npm run build` passed while the
+  running page was blank. Caught by checking the page rather than trusting the build.
+
+### Verified
+Both suites green (18 frontend, 10 backend), build clean, console clean. Toggle knobs measured
+inside their track in both states with a 10px gap to the label; markers restored; coordinates
+display 7 decimals; library map renders with the floating hint and switches correctly between
+routes.

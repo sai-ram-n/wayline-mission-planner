@@ -27,7 +27,6 @@ import CreateRouteDialog from '../components/library/CreateRouteDialog.jsx';
 import FolderTree from '../components/library/FolderTree.jsx';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import Spinner from '../components/ui/Spinner.jsx';
-import EmptyState from '../components/ui/EmptyState.jsx';
 import { computeStats } from '../lib/geo.js';
 import { polygonArea } from '../lib/routegen.js';
 
@@ -420,8 +419,13 @@ export default function Library() {
       </section>
 
       {/* ------------------------------------------------------- map preview */}
+      {/*
+        The map is always mounted, as in the reference where the library sits
+        beside a full-bleed map (§2). Selecting a route adds its header and
+        stats above it rather than swapping a blank panel in and out.
+      */}
       <div className="relative flex min-w-0 flex-1 flex-col">
-        {detail ? (
+        {detail && (
           <>
             <div className="flex shrink-0 items-center gap-2 border-b border-panel-700 bg-panel-900 px-3 py-2">
               <div className="min-w-0 flex-1">
@@ -442,31 +446,38 @@ export default function Library() {
             <div className="shrink-0 border-b border-panel-700 bg-panel-900">
               <StatsBar stats={previewStats} area={previewArea} />
             </div>
-
-            <div className="min-h-0 flex-1">
-              <MapCanvas
-                key={detail.id}
-                waypoints={detail.waypoints}
-                takeoffPoint={detail.settings?.takeOffRefPoint ?? null}
-                geometry={detail.geometry}
-                fitTrigger={detail.id}
-                readOnly
-              />
-            </div>
           </>
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            {detailLoading ? (
-              <Spinner label="Loading route…" />
-            ) : (
-              <EmptyState
-                icon={LuMapPin}
-                title="No route selected"
-                message="Select a route to preview it here. Double-click a card to open it in the editor."
-              />
-            )}
-          </div>
         )}
+
+        <div className="relative min-h-0 flex-1">
+          <MapCanvas
+            key={detail?.id ?? 'empty'}
+            waypoints={detail?.waypoints ?? []}
+            takeoffPoint={detail?.settings?.takeOffRefPoint ?? null}
+            geometry={detail?.geometry ?? null}
+            fitTrigger={detail?.id ?? 'empty'}
+            readOnly
+          />
+
+          {!detail && (
+            <div className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center p-6">
+              <div className="pointer-events-auto max-w-xs rounded-lg border border-panel-700 bg-panel-900/95 px-5 py-4 text-center shadow-2xl backdrop-blur-sm">
+                {detailLoading ? (
+                  <Spinner label="Loading route…" />
+                ) : (
+                  <>
+                    <LuMapPin aria-hidden className="mx-auto mb-2 h-6 w-6 text-slate-500" />
+                    <h2 className="text-sm font-medium text-slate-200">No route selected</h2>
+                    <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                      Select a route to preview it here, or double-click a card to open it in the
+                      editor.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ------------------------------------------------------------ dialogs */}

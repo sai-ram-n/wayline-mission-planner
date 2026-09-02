@@ -29,7 +29,13 @@ export default function AppShell({ children }) {
               to={to}
               title={hint}
               className={({ isActive }) =>
-                `btn ${isActive ? 'bg-panel-700 text-slate-100' : 'text-slate-400 hover:bg-panel-800 hover:text-slate-200'}`
+                // A left accent bar makes the active section readable at a glance,
+                // rather than relying on a subtle background shade alone.
+                `btn relative ${
+                  isActive
+                    ? 'bg-panel-700 text-slate-100 after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-accent'
+                    : 'text-slate-400 hover:bg-panel-800 hover:text-slate-200'
+                }`
               }
             >
               <Icon aria-hidden className="h-4 w-4" />

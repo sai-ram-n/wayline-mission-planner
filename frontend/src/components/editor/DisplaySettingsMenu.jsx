@@ -26,12 +26,27 @@ export const DEFAULT_DISPLAY_SETTINGS = {
   boldLineMode: false,
 };
 
+/**
+ * `displayWaypoints` is deliberately not persisted.
+ *
+ * Hiding the markers is a useful momentary "let me see the map" gesture, but the
+ * markers are also the only way to select or drag a waypoint. Remembering the
+ * off state across sessions leaves the editor looking broken with no obvious
+ * cause, so it always comes back on.
+ */
+const PERSISTED_KEYS = ['displayGimbalOrientation', 'displayVerticalLines', 'boldLineMode'];
+
 /** Read the saved view preferences, tolerating a blocked or empty store. */
 export function loadDisplaySettings() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_DISPLAY_SETTINGS };
-    return { ...DEFAULT_DISPLAY_SETTINGS, ...JSON.parse(raw) };
+    const saved = JSON.parse(raw);
+    const restored = { ...DEFAULT_DISPLAY_SETTINGS };
+    for (const key of PERSISTED_KEYS) {
+      if (typeof saved?.[key] === 'boolean') restored[key] = saved[key];
+    }
+    return restored;
   } catch {
     return { ...DEFAULT_DISPLAY_SETTINGS };
   }
@@ -90,7 +105,8 @@ export default function DisplaySettingsMenu({
     const updated = { ...value, [key]: next };
     onChange(updated);
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      const toSave = Object.fromEntries(PERSISTED_KEYS.map((k) => [k, !!updated[k]]));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
     } catch {
       // A blocked storage API must not break the toggle itself.
     }

@@ -8,10 +8,68 @@
   }
   body {
     @apply bg-panel-950 text-slate-200 antialiased;
+    text-rendering: optimizeLegibility;
   }
   /* Keep focus rings visible for keyboard users without boxing every mouse click. */
   :focus-visible {
     @apply outline-none ring-2 ring-accent ring-offset-1 ring-offset-panel-950;
+  }
+
+  /*
+   * Dark scrollbars. The default light track cuts a bright stripe through every
+   * panel in this UI, which is the most obvious "unfinished" tell in a dark app.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.panel.600') transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full border-[3px] border-solid border-transparent bg-panel-600;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-panel-500;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Number inputs: the native spinners duplicate our own stepper buttons. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  /* Range inputs, styled to match the panels rather than the OS. */
+  input[type='range'] {
+    @apply h-1 cursor-pointer appearance-none rounded-full bg-panel-600;
+  }
+  input[type='range']::-webkit-slider-thumb {
+    @apply h-3.5 w-3.5 appearance-none rounded-full border-2 border-panel-900 bg-accent;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+  }
+  input[type='range']::-moz-range-thumb {
+    @apply h-3.5 w-3.5 rounded-full border-2 border-panel-900 bg-accent;
+  }
+  input[type='range']:disabled {
+    @apply cursor-not-allowed opacity-40;
+  }
+
+  /* Native dropdown lists render light by default in a dark UI. */
+  select option {
+    @apply bg-panel-800 text-slate-100;
   }
 }
 
@@ -28,10 +86,10 @@
            disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-accent text-white hover:bg-accent/90;
+    @apply btn bg-accent text-white shadow-sm hover:bg-accent/90 active:bg-accent/80;
   }
   .btn-secondary {
-    @apply btn bg-panel-700 text-slate-200 hover:bg-panel-600;
+    @apply btn bg-panel-700 text-slate-200 hover:bg-panel-600 active:bg-panel-600/80;
   }
   .btn-ghost {
     @apply btn text-slate-400 hover:text-slate-100 hover:bg-panel-700;
@@ -41,8 +99,10 @@
   }
   .input {
     @apply w-full bg-panel-800 border border-panel-600 rounded-md px-2.5 py-1.5
-           text-sm text-slate-100 placeholder:text-slate-500
-           focus:border-accent focus:outline-none;
+           text-sm text-slate-100 placeholder:text-slate-500 transition-colors
+           hover:border-panel-500
+           focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40
+           disabled:cursor-not-allowed disabled:opacity-50;
   }
   .label {
     @apply block text-xs font-medium text-slate-400 mb-1;

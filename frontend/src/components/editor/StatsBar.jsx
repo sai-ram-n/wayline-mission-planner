@@ -7,10 +7,18 @@ import { formatArea, formatDistance, formatDuration } from '../../lib/geo.js';
 
 function Stat({ icon: Icon, label, value }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1" title={label}>
-      <Icon aria-hidden className="h-3.5 w-3.5 text-slate-500" />
-      <span className="truncate font-mono text-xs text-slate-200">{value}</span>
-      <span className="truncate text-[10px] leading-tight text-slate-500">{label}</span>
+    <div className="flex min-w-0 flex-1 flex-col items-center gap-1 px-1.5" title={label}>
+      <Icon aria-hidden className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+      <span className="w-full truncate text-center font-mono text-xs font-medium text-slate-100">
+        {value}
+      </span>
+      {/*
+        Labels wrap rather than truncate: "Flight Distance" and "Flight Duration"
+        differ only in the last word, so a mid-word ellipsis makes them identical.
+      */}
+      <span className="w-full text-balance text-center text-[10px] leading-tight text-slate-500">
+        {label}
+      </span>
     </div>
   );
 }

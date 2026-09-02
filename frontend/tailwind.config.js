@@ -12,6 +12,7 @@ export default {
           800: '#18212b',
           700: '#222d3a',
           600: '#2f3d4d',
+          500: '#3f5165',
         },
         accent: {
           DEFAULT: '#3b9dff',

@@ -389,7 +389,7 @@ export default function MapCanvas({
           <button
             type="button"
             onClick={() => mapRef.current?.zoomIn()}
-            className="px-2.5 py-1.5 text-slate-300 hover:bg-panel-700"
+            className="px-2.5 py-1.5 text-slate-300 transition-colors hover:bg-panel-700"
             aria-label="Zoom in"
           >
             +
@@ -397,7 +397,7 @@ export default function MapCanvas({
           <button
             type="button"
             onClick={() => mapRef.current?.zoomOut()}
-            className="border-t border-panel-700 px-2.5 py-1.5 text-slate-300 hover:bg-panel-700"
+            className="border-t border-panel-700 px-2.5 py-1.5 text-slate-300 transition-colors hover:bg-panel-700"
             aria-label="Zoom out"
           >
             −
@@ -409,7 +409,9 @@ export default function MapCanvas({
           onClick={fitRoute}
           disabled={!waypoints.length}
           title="Fit route to view"
-          className="pointer-events-auto rounded-md border border-panel-700 bg-panel-900/95 p-2 text-slate-300 shadow-lg hover:bg-panel-700 disabled:opacity-40"
+          className="pointer-events-auto rounded-md border border-panel-700 bg-panel-900/95 p-2
+            text-slate-300 shadow-lg transition-colors enabled:hover:bg-panel-700
+            disabled:cursor-not-allowed disabled:text-slate-600"
         >
           <LuMaximize className="h-4 w-4" />
         </button>
@@ -418,7 +420,8 @@ export default function MapCanvas({
           type="button"
           onClick={() => setBasemap((b) => (b === 'street' ? 'topo' : 'street'))}
           title={`Basemap: ${tiles.label} — click to switch`}
-          className="pointer-events-auto rounded-md border border-panel-700 bg-panel-900/95 p-2 text-slate-300 shadow-lg hover:bg-panel-700"
+          className="pointer-events-auto rounded-md border border-panel-700 bg-panel-900/95 p-2
+            text-slate-300 shadow-lg transition-colors hover:bg-panel-700"
         >
           <LuLayers className="h-4 w-4" />
         </button>

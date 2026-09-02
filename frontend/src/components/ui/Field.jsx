@@ -82,18 +82,22 @@ export function NumberStepper({
   decimals = 3,
 }) {
   const id = useId();
-  const [draft, setDraft] = useState(String(value ?? ''));
+  // Displayed at the field's own precision: a raw float renders as
+  // 17.393152615154893, which is unreadable and implies false accuracy.
+  const format = (v) => (v == null || v === '' ? '' : String(tidy(Number(v), decimals)));
+  const [draft, setDraft] = useState(() => format(value));
   const focused = useRef(false);
 
   // Track external changes (undo, loading a mission) unless the user is typing.
   useEffect(() => {
-    if (!focused.current) setDraft(String(value ?? ''));
-  }, [value]);
+    if (!focused.current) setDraft(format(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, decimals]);
 
   const commit = (raw) => {
     const parsed = Number(raw);
     if (raw === '' || Number.isNaN(parsed)) {
-      setDraft(String(value ?? ''));
+      setDraft(format(value));
       return;
     }
     const next = tidy(clamp(parsed, min, max), decimals);
@@ -257,27 +261,61 @@ export function SelectField({ label, hint, value, options, onChange, disabled })
 
 /* -------------------------------------------------------------------- toggle */
 
+/**
+ * A switch and its label.
+ *
+ * The knob is anchored with `left`/`top` rather than relying on its static
+ * position: a button centres its content, so an unanchored absolute knob starts
+ * mid-track and the "on" transform pushes it clean out of the track and over the
+ * label. Anchoring makes the travel explicit and correct in both states.
+ *
+ * The label is part of the control, so clicking the text toggles too.
+ */
 export function ToggleField({ label, hint, value, onChange, disabled }) {
+  const id = useId();
+  const toggle = () => {
+    if (!disabled) onChange(!value);
+  };
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2.5">
       <button
         type="button"
         role="switch"
+        id={id}
         aria-checked={!!value}
         aria-label={label}
         disabled={disabled}
-        onClick={() => onChange(!value)}
-        className={`relative h-4 w-7 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
-          value ? 'bg-accent' : 'bg-panel-600'
-        }`}
+        onClick={toggle}
+        className={`relative h-5 w-9 shrink-0 rounded-full border transition-colors
+          disabled:cursor-not-allowed disabled:opacity-40 ${
+            value
+              ? 'border-accent bg-accent'
+              : 'border-panel-600 bg-panel-700 hover:border-panel-500'
+          }`}
       >
         <span
-          className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform ${
-            value ? 'translate-x-3.5' : 'translate-x-0.5'
-          }`}
+          aria-hidden
+          className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full bg-white
+            shadow-sm transition-[left] duration-150 ease-out ${
+              value ? 'left-[18px]' : 'left-[2px]'
+            }`}
         />
       </button>
-      <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{label}</span>
+
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={toggle}
+        disabled={disabled}
+        className={`min-w-0 flex-1 truncate text-left text-xs transition-colors
+          disabled:cursor-not-allowed disabled:opacity-40 ${
+            value ? 'text-slate-200' : 'text-slate-400'
+          } ${disabled ? '' : 'hover:text-slate-100'}`}
+      >
+        {label}
+      </button>
+
       <InfoTip text={hint} />
     </div>
   );
