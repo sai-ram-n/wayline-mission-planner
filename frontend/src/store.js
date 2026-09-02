@@ -201,6 +201,27 @@ export const useMissionStore = create((set, get) => ({
     set((s) => ({ mission: { ...s.mission, geometry }, dirty: true }));
   },
 
+  /**
+   * Install a freshly generated mapping route.
+   *
+   * Deliberately does not push undo history: regeneration fires on every settings
+   * change, so recording each one would bury the user's own edits. Undo for these
+   * routes is the geometry and the settings, both of which are still restorable.
+   *
+   * If the generated route is identical to what is already loaded, nothing is
+   * written at all — otherwise merely opening a saved mapping route would
+   * regenerate it, mark the mission dirty and trip the unsaved-changes guard.
+   */
+  applyGeneratedRoute(waypoints) {
+    if (sameRoute(get().mission.waypoints, waypoints)) return;
+    set((s) => ({
+      mission: { ...s.mission, waypoints },
+      dirty: true,
+      selectedWaypoint: null,
+      selectedAction: null,
+    }));
+  },
+
   /** Replace the whole waypoint array — used by the route generators. */
   replaceWaypoints(waypoints) {
     get().pushHistory();
@@ -393,6 +414,27 @@ export const useMissionStore = create((set, get) => ({
     set({ error: null });
   },
 }));
+
+/**
+ * Whether two waypoint lists describe the same flight path.
+ *
+ * Compares position and altitude only: generated waypoints carry synthetic ids
+ * while saved ones carry database ids, so the ids can never match even when the
+ * routes are identical.
+ */
+function sameRoute(a = [], b = []) {
+  if (a.length !== b.length) return false;
+  const EPSILON = 1e-9;
+  return a.every((left, i) => {
+    const right = b[i];
+    return (
+      Math.abs(left.lat - right.lat) < EPSILON &&
+      Math.abs(left.lng - right.lng) < EPSILON &&
+      Math.abs((left.height ?? 0) - (right.height ?? 0)) < EPSILON &&
+      (left.actions?.length ?? 0) === (right.actions?.length ?? 0)
+    );
+  });
+}
 
 /** Drop client-only ids before sending to the server, which assigns real ones. */
 function stripLocalIds(waypoint) {

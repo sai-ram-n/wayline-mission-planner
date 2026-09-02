@@ -7,8 +7,10 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  CircleMarker,
   MapContainer,
   Marker,
+  Polygon,
   Polyline,
   Popup,
   TileLayer,
@@ -16,7 +18,7 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
-import { LuCrosshair, LuLayers, LuMaximize } from 'react-icons/lu';
+import { LuCrosshair, LuLayers, LuMaximize, LuUndo2 } from 'react-icons/lu';
 import {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -66,11 +68,29 @@ const takeoffIcon = L.divIcon({
   iconAnchor: [11, 11],
 });
 
-/** Translates map clicks into waypoints, unless a placement mode owns the click. */
-function ClickHandler({ onMapClick }) {
+/**
+ * Translates map clicks into waypoints or drawing vertices.
+ *
+ * While drawing, double-click finishes the shape (§8), so the default
+ * double-click-to-zoom is suppressed for the duration.
+ */
+function ClickHandler({ onMapClick, onMapDoubleClick, drawing }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (drawing) map.doubleClickZoom.disable();
+    else map.doubleClickZoom.enable();
+    return () => map.doubleClickZoom.enable();
+  }, [drawing, map]);
+
   useMapEvents({
     click(event) {
       onMapClick(event.latlng);
+    },
+    dblclick(event) {
+      if (!drawing) return;
+      L.DomEvent.stopPropagation(event);
+      onMapDoubleClick?.(event.latlng);
     },
   });
   return null;
@@ -107,6 +127,15 @@ export default function MapCanvas({
   onPlacePoint,
   fitTrigger,
   children,
+  // --- mapping routes (Phase 5)
+  drawMode = null, // 'area' | 'linear' | null
+  draft = [], // vertices captured so far while drawing
+  geometry = null, // the committed shape, as { vertices }
+  generatedLines = [], // boustrophedon lines to preview
+  onDrawVertex,
+  onFinishDrawing,
+  onCancelDrawing,
+  onMoveGeometryVertex,
 }) {
   const [basemap, setBasemap] = useState('street');
   const mapRef = useRef(null);
@@ -119,8 +148,22 @@ export default function MapCanvas({
       onPlacePoint?.(latlng, placementMode);
       return;
     }
+    if (drawMode) {
+      onDrawVertex?.(latlng);
+      return;
+    }
     onAddWaypoint?.(latlng);
   };
+
+  // Esc cancels an in-progress shape, matching the reference editor (§8).
+  useEffect(() => {
+    if (!drawMode) return undefined;
+    const onKey = (event) => {
+      if (event.key === 'Escape') onCancelDrawing?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawMode, onCancelDrawing]);
 
   const fitRoute = () => {
     const bounds = waypointBounds(waypoints);
@@ -130,6 +173,10 @@ export default function MapCanvas({
   };
 
   const tiles = TILE_LAYERS[basemap];
+
+  // A committed area is a closed ring; a linear route is an open centre line.
+  const committed = useMemo(() => geometry?.vertices ?? [], [geometry]);
+  const isAreaShape = geometry?.kind === 'area';
 
   return (
     <div className="relative h-full w-full">
@@ -143,8 +190,86 @@ export default function MapCanvas({
         <TileLayer url={tiles.url} attribution={tiles.attribution} maxZoom={tiles.maxZoom} />
 
         <MapRefBridge onReady={(m) => { mapRef.current = m; }} />
-        <ClickHandler onMapClick={handleMapClick} />
+        <ClickHandler
+          onMapClick={handleMapClick}
+          onMapDoubleClick={() => onFinishDrawing?.()}
+          drawing={!!drawMode}
+        />
         <FitOnLoad waypoints={waypoints} trigger={fitTrigger} />
+
+        {/* The surveyed area or corridor centre line, once committed. */}
+        {committed.length > 1 &&
+          (isAreaShape ? (
+            <Polygon
+              positions={committed}
+              pathOptions={{ color: MAP_COLORS.area, weight: 2, fillOpacity: 0.08 }}
+            />
+          ) : (
+            <Polyline
+              positions={committed}
+              pathOptions={{ color: MAP_COLORS.area, weight: 2, dashArray: '6 4' }}
+            />
+          ))}
+
+        {/* Draggable handles on the committed shape's vertices. */}
+        {!drawMode &&
+          committed.map((position, index) => (
+            <CircleMarker
+              key={`geom-${index}`}
+              center={position}
+              radius={5}
+              pathOptions={{ color: '#fff', weight: 2, fillColor: MAP_COLORS.area, fillOpacity: 1 }}
+              eventHandlers={{
+                mousedown: (event) => {
+                  // Drag a vertex without the map panning underneath it.
+                  L.DomEvent.stopPropagation(event);
+                  const map = event.target._map;
+                  map.dragging.disable();
+                  const move = (moveEvent) =>
+                    onMoveGeometryVertex?.(index, moveEvent.latlng.lat, moveEvent.latlng.lng);
+                  const up = () => {
+                    map.dragging.enable();
+                    map.off('mousemove', move);
+                    map.off('mouseup', up);
+                  };
+                  map.on('mousemove', move);
+                  map.on('mouseup', up);
+                },
+              }}
+            />
+          ))}
+
+        {/* The generated boustrophedon preview. */}
+        {generatedLines.map((line, index) => (
+          <Polyline
+            key={`gen-${index}`}
+            positions={line}
+            pathOptions={{ color: MAP_COLORS.generated, weight: 2, opacity: 0.9 }}
+          />
+        ))}
+
+        {/* The shape being drawn right now. */}
+        {draft.length > 0 && (
+          <>
+            <Polyline
+              positions={draft}
+              pathOptions={{ color: MAP_COLORS.generated, weight: 2, dashArray: '4 4' }}
+            />
+            {draft.map((position, index) => (
+              <CircleMarker
+                key={`draft-${index}`}
+                center={position}
+                radius={4}
+                pathOptions={{
+                  color: '#fff',
+                  weight: 2,
+                  fillColor: MAP_COLORS.generated,
+                  fillOpacity: 1,
+                }}
+              />
+            ))}
+          </>
+        )}
 
         {positions.length > 1 && (
           <>
@@ -230,6 +355,37 @@ export default function MapCanvas({
           <LuLayers className="h-4 w-4" />
         </button>
       </div>
+
+      {drawMode && (
+        <div className="absolute inset-x-0 top-3 z-[400] flex justify-center">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-accent/40 bg-panel-900/95 px-4 py-1.5 text-xs text-slate-200 shadow-lg">
+            <LuCrosshair className="h-3.5 w-3.5 shrink-0 text-accent" />
+            <span>
+              {drawMode === 'area'
+                ? 'Click on map to draw a mapping area'
+                : 'Click on map to draw flight band'}
+              <span className="ml-1 text-slate-500">
+                · double-click to finish · Esc to cancel
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => onFinishDrawing?.()}
+              disabled={draft.length < (drawMode === 'area' ? 3 : 2)}
+              className="btn-primary px-2 py-0.5 text-[11px]"
+            >
+              Finish
+            </button>
+            <button
+              type="button"
+              onClick={() => onCancelDrawing?.()}
+              className="btn-ghost px-2 py-0.5 text-[11px]"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {placementMode && (
         <div className="pointer-events-none absolute inset-x-0 top-3 z-[400] flex justify-center">

@@ -54,6 +54,8 @@ app.get('/api/meta', (req, res) =>
     photoActions: constants.PHOTO_ACTIONS,
     defaultSettings: constants.DEFAULT_SETTINGS,
     defaultMappingSettings: constants.DEFAULT_MAPPING_SETTINGS,
+    mappingSensors: constants.MAPPING_SENSORS,
+    defaultMappingSensor: constants.DEFAULT_MAPPING_SENSOR,
     defaultLinearSettings: constants.DEFAULT_LINEAR_SETTINGS,
     assignmentStatuses: constants.ASSIGNMENT_STATUSES,
     assignmentNextStatus: constants.ASSIGNMENT_NEXT_STATUS,

@@ -41,7 +41,7 @@ products.
 | 2 | Frontend scaffold + routing + store | ✅ Complete |
 | 3 | Waypoint editor — map canvas | ✅ Complete |
 | 4 | Waypoint settings + action editing | ✅ Complete |
-| 5 | Area + Linear route generation | ⬜ Not started |
+| 5 | Area + Linear route generation | ✅ Complete |
 | 6 | Wayline library | ⬜ Not started |
 | 7 | Drone fleet + assignment | ⬜ Not started |
 | 8 | KMZ import/export + polish | ⬜ Not started |
@@ -340,3 +340,75 @@ Driven end-to-end in the browser against the live backend:
 ### Next
 **Phase 5** — Area and Linear routes: polygon and centre-line drawing on the map, their settings
 panels from §8, and boustrophedon generation in `lib/routegen.js`.
+
+---
+
+## Phase 5 — Area and Linear mapping routes ✅
+
+**Date:** 2026-09-02 · **Version:** 0.6.0
+
+### What was built
+- `lib/routegen.js` — the boustrophedon generators. A camera footprint model turns GSD and the two
+  overlap rates into line spacing and photo spacing; polygons are rotated to the course angle,
+  scanned, and each scan line's boundary crossings are paired into inside-segments before being
+  rotated back. Linear routes buffer the centre line by the left/right extensions into a corridor,
+  cut it into `cuttingDistance` sections, and fill each one parallel to the line.
+- `components/editor/MappingSettingsPanel.jsx` — every control from §8.1 and §8.2, with the
+  derived frame width, line spacing and photo spacing shown so the settings are inspectable
+  rather than opaque.
+- `MapCanvas.jsx` — drawing mode: click to place vertices, double-click or Finish to close,
+  Esc or Cancel to abandon. The committed shape gets draggable vertex handles, and the generated
+  boustrophedon is drawn in green inside the blue boundary.
+- `Editor.jsx` — route-type switcher (empty missions only), `?type=`/`?series=`/`?model=` query
+  parameters so Phase 6's Create Route dialog can hand off cleanly, and debounced regeneration on
+  every geometry or settings change.
+- `StatsBar.jsx` — Area for area routes, Centre Line plus Area for linear ones, wrapping into a
+  grid once there are more than four metrics.
+- `backend/constants.js` — `MAPPING_SENSORS`, and the §8 route-type defaults (an area route
+  starts in AGL at 15 m/s, a linear route at 10 m/s).
+- `frontend/test/routegen.test.mjs` — 16 tests, run with `npm test` in `frontend/`.
+
+### Key decisions
+- **The sensor catalogue is a stated assumption, not observed data.** §8 records the GSD and
+  overlap defaults but not the sensor specifications behind them, and GSD is meaningless without
+  them. `MAPPING_SENSORS` therefore holds published still-image resolutions, flagged as an
+  assumption in the source. Our estimates respond correctly to every setting but do not reproduce
+  the reference's exact figures: for the §8.1 rectangle it reports 522.9 m where we compute
+  670 m over three lines. This is recorded rather than papered over.
+- **Regeneration does not push undo history**, and is skipped entirely when the result matches
+  what is already loaded. For these routes the undoable state is the geometry and the settings.
+- **The §1 compatibility matrix is enforced in the editor.** Choosing a route type the current
+  aircraft cannot fly switches to the first compatible series — an M30T cannot fly a linear
+  route, so picking Linear moves to the Mavic 3E.
+
+### Bugs found and fixed
+- **A saved mapping route opened dirty.** Regeneration ran on load and always wrote to the store,
+  so merely opening a route marked it as having unsaved changes and armed the navigation guard.
+  `applyGeneratedRoute` now compares the generated path against the loaded one and does nothing
+  when they match.
+- **setState inside a state updater, again.** `handleFinishDrawing` committed the geometry from
+  inside a `setDraft` updater, which React reported as updating a component while rendering.
+  Same class of bug as the Phase 3 reorder; it now reads `draft` directly. All other updaters in
+  the codebase were checked and are pure.
+- **A stale closure in `startRoute`** captured `mission` from the first render, so the aircraft
+  compatibility check read outdated values. It now reads live store state.
+- The stats bar squashed five metrics into one row; it now wraps into a grid.
+
+### Verified
+`npm test` passes 16/16, and end-to-end in the browser against the live backend:
+- Area: drew a polygon, generated a serpentine inside it; Finish stays disabled below three
+  points; double-click finishes; Esc cancels a redraw and leaves the previous route intact.
+- Settings drive regeneration live: side overlap 70 % → 90 % tightened line spacing 60 m → 20 m
+  and took the route from 6.59 km/206 photos to 18.14 km/572 photos.
+- Area defaults match §8.1 exactly: AGL, 15 m/s, GSD 5 cm/px, safe takeoff 20 m, Ortho, and
+  WIDE/IR only on the M30T — no Zoom.
+- Linear: drew a three-point centre line, generated a corridor fill; the header shows Centre Line
+  and Area; defaults match §8.2 (10 m/s, 50 m extensions, 1000 m cutting, Parallel to Center Line).
+- Both types save and reload byte-identically, geometry included, and reload no longer marks the
+  mission dirty.
+- Production build succeeds; console clean.
+
+### Next
+**Phase 6** — the wayline library: grid with SVG preview thumbnails, search, model and route-type
+filters, sort, folders, per-card Rename / Duplicate / Delete / Lock, and the Create Route dialog
+enforcing the §1 compatibility matrix.

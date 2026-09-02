@@ -4,7 +4,7 @@
  * and its actions.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   LuSave,
   LuUndo2,
@@ -12,6 +12,7 @@ import {
   LuArrowUpDown,
   LuHouse,
   LuCircleAlert,
+  LuPencilRuler,
 } from 'react-icons/lu';
 
 import MapCanvas from '../components/editor/MapCanvas.jsx';
@@ -21,10 +22,12 @@ import SaveMissionDialog from '../components/editor/SaveMissionDialog.jsx';
 import GlobalSettingsPanel from '../components/editor/GlobalSettingsPanel.jsx';
 import WaypointPanel from '../components/editor/WaypointPanel.jsx';
 import ActionEditor from '../components/editor/ActionEditor.jsx';
+import MappingSettingsPanel from '../components/editor/MappingSettingsPanel.jsx';
 import ErrorBanner from '../components/ui/ErrorBanner.jsx';
 import Spinner from '../components/ui/Spinner.jsx';
 import useMissionStore from '../store.js';
 import { computeStats } from '../lib/geo.js';
+import { generateRoute, lineLength, polygonArea } from '../lib/routegen.js';
 import { ROUTE_TYPE_LABELS } from '../lib/constants.js';
 
 export default function Editor() {
@@ -56,6 +59,9 @@ export default function Editor() {
     saveMission,
     undo,
     clearError,
+    setGeometry,
+    applyGeneratedRoute,
+    newMission: resetMission,
   } = useMissionStore.getState();
 
   const [saveOpen, setSaveOpen] = useState(false);
@@ -63,23 +69,76 @@ export default function Editor() {
   const [fitTrigger, setFitTrigger] = useState(0);
   const [toast, setToast] = useState(null);
   const [inspectorTab, setInspectorTab] = useState('route');
+  const [drawMode, setDrawMode] = useState(null);
+  const [draft, setDraft] = useState([]);
+  const [generated, setGenerated] = useState(null);
+  const [searchParams] = useSearchParams();
 
   // Selecting a waypoint switches the inspector to it, as the reference does.
   useEffect(() => {
     if (selectedWaypoint != null) setInspectorTab('waypoint');
   }, [selectedWaypoint]);
 
-  // Load the requested mission, or start a blank one.
+  // Load the requested mission, or start a blank one of the requested route type.
   useEffect(() => {
     if (id) {
       loadMission(id)
         .then(() => setFitTrigger((n) => n + 1))
         .catch(() => {});
-    } else if (mission.id) {
-      newMission();
+      return;
+    }
+    const requested = searchParams.get('type');
+    const routeType = ['waypoint', 'area', 'linear'].includes(requested) ? requested : 'waypoint';
+    const series = searchParams.get('series');
+    const model = searchParams.get('model');
+    if (mission.id || mission.route_type !== routeType || mission.waypoints.length) {
+      startRoute(routeType, { series, model });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, searchParams]);
+
+  /**
+   * Start a blank route of a given type, seeded with that type's own defaults —
+   * an area route starts in AGL at 15 m/s, a waypoint route in ASL at 10 (§5, §8).
+   */
+  const startRoute = useCallback(
+    (routeType, aircraft = {}) => {
+      // Read live state rather than closing over `mission`, which would be stale
+      // by the time a later click calls this.
+      const { meta, mission: current } = useMissionStore.getState();
+      const extra =
+        routeType === 'area'
+          ? meta?.defaultMappingSettings
+          : routeType === 'linear'
+            ? meta?.defaultLinearSettings
+            : null;
+
+      // Honour the §1 compatibility matrix: if the current aircraft cannot fly
+      // this route type, fall back to the first series that can.
+      const allowed = meta?.routeTypeAircraft?.[routeType] ?? [];
+      let series = aircraft.series ?? current.aircraft_series;
+      let model = aircraft.model ?? current.aircraft_model;
+      if (!meta?.aircraft?.[series]) {
+        series = current.aircraft_series;
+        model = current.aircraft_model;
+      }
+      if (allowed.length && !allowed.includes(series)) {
+        series = allowed[0];
+        model = Object.keys(meta?.aircraft?.[series]?.models ?? {})[0] ?? model;
+      }
+
+      resetMission({
+        route_type: routeType,
+        aircraft_series: series,
+        aircraft_model: model,
+        settings: { ...(meta?.defaultSettings ?? {}), ...(extra ?? {}) },
+      });
+      setDraft([]);
+      setGenerated(null);
+      setDrawMode(null);
+    },
+    [resetMission]
+  );
 
   // Warn before losing unsaved work on reload or tab close.
   useEffect(() => {
@@ -100,6 +159,94 @@ export default function Editor() {
   const stats = useMemo(
     () => computeStats(mission.waypoints, mission.settings),
     [mission.waypoints, mission.settings]
+  );
+
+  const isMapping = mission.route_type === 'area' || mission.route_type === 'linear';
+
+  /* ------------------------------------------------------- drawing a shape */
+
+  const startDrawing = () => {
+    if (mission.locked) return showToast('This wayline is locked');
+    setDraft([]);
+    setDrawMode(mission.route_type);
+  };
+
+  const handleDrawVertex = ({ lat, lng }) => setDraft((d) => [...d, [lat, lng]]);
+
+  // Reads `draft` directly rather than committing from inside a setState updater:
+  // updaters must stay pure, and React re-invokes them.
+  const handleFinishDrawing = useCallback(() => {
+    const minimum = mission.route_type === 'area' ? 3 : 2;
+    if (draft.length < minimum) {
+      showToast(
+        mission.route_type === 'area'
+          ? 'An area needs at least three points'
+          : 'A centre line needs at least two points'
+      );
+      return;
+    }
+    setGeometry({ kind: mission.route_type, vertices: draft });
+    setDrawMode(null);
+    setDraft([]);
+  }, [draft, mission.route_type, setGeometry, showToast]);
+
+  const handleCancelDrawing = useCallback(() => {
+    setDraft([]);
+    setDrawMode(null);
+  }, []);
+
+  const handleMoveGeometryVertex = (index, lat, lng) => {
+    const vertices = (mission.geometry?.vertices ?? []).map((v, i) =>
+      i === index ? [lat, lng] : v
+    );
+    setGeometry({ ...mission.geometry, vertices });
+  };
+
+  const clearGeometry = () => {
+    setGeometry(null);
+    setGenerated(null);
+    clearWaypoints();
+  };
+
+  /* --------------------------------------------------------- regeneration */
+
+  // Regenerating on every settings change keeps the preview honest; the small
+  // delay stops a slider drag from running the generator on every frame.
+  const mappingSettings = mission.settings;
+  useEffect(() => {
+    if (!isMapping) return undefined;
+    const geometry = mission.geometry;
+    if (!geometry?.vertices?.length || drawMode) return undefined;
+
+    const meta = useMissionStore.getState().meta;
+    const sensor =
+      meta?.mappingSensors?.[mission.aircraft_model] ?? meta?.defaultMappingSensor;
+
+    const timer = setTimeout(() => {
+      const result = generateRoute(mission.route_type, geometry, mappingSettings, sensor);
+      if (!result) return;
+      setGenerated(result);
+      applyGeneratedRoute(result.waypoints);
+    }, 120);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMapping, mission.geometry, mappingSettings, mission.route_type, drawMode]);
+
+  /** Area and centre-line length shown in the stats bar for mapping routes. */
+  const shapeArea = useMemo(() => {
+    if (!isMapping) return null;
+    if (generated?.area) return generated.area;
+    const vertices = mission.geometry?.vertices;
+    if (!vertices?.length) return null;
+    return mission.route_type === 'area' ? polygonArea(vertices) : 0;
+  }, [isMapping, generated, mission.geometry, mission.route_type]);
+
+  const centerLineLength = useMemo(
+    () =>
+      mission.route_type === 'linear' && mission.geometry?.vertices
+        ? lineLength(mission.geometry.vertices)
+        : null,
+    [mission.route_type, mission.geometry]
   );
 
   const takeoffPoint = mission.settings?.takeOffRefPoint ?? null;
@@ -175,7 +322,7 @@ export default function Editor() {
           </p>
         </div>
 
-        <StatsBar stats={stats} />
+        <StatsBar stats={stats} area={shapeArea} centerLineLength={centerLineLength} />
 
         {/* toolbar */}
         <div className="flex items-center gap-1 border-b border-panel-700 px-2 py-1.5">
@@ -217,6 +364,73 @@ export default function Editor() {
             <LuTrash2 className="h-3.5 w-3.5" />
           </button>
         </div>
+
+        {/* Route type — only while the mission is still empty and unsaved. */}
+        {!mission.id && !mission.waypoints.length && !mission.geometry && (
+          <div className="border-b border-panel-700 px-2 py-1.5">
+            <div className="flex rounded-md border border-panel-600 bg-panel-800 p-0.5">
+              {[
+                { value: 'waypoint', label: 'Waypoint' },
+                { value: 'area', label: 'Area' },
+                { value: 'linear', label: 'Linear' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  title={
+                    (meta?.routeTypeAircraft?.[option.value] ?? []).includes(
+                      mission.aircraft_series
+                    )
+                      ? undefined
+                      : `${mission.aircraft_model} cannot fly this route type — choosing it switches to a compatible aircraft`
+                  }
+                  onClick={() => startRoute(option.value)}
+                  className={`min-w-0 flex-1 truncate rounded px-2 py-1 text-[11px] font-medium transition-colors ${
+                    mission.route_type === option.value
+                      ? 'bg-accent text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Drawing controls for mapping routes. */}
+        {isMapping && (
+          <div className="flex gap-1 border-b border-panel-700 px-2 py-1.5">
+            <button
+              type="button"
+              onClick={startDrawing}
+              disabled={mission.locked || !!drawMode}
+              className="btn-secondary min-w-0 flex-1 px-2 py-1 text-xs"
+            >
+              <LuPencilRuler className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">
+                {mission.geometry
+                  ? mission.route_type === 'area'
+                    ? 'Redraw area'
+                    : 'Redraw centre line'
+                  : mission.route_type === 'area'
+                    ? 'Draw area'
+                    : 'Draw centre line'}
+              </span>
+            </button>
+            {mission.geometry && (
+              <button
+                type="button"
+                onClick={clearGeometry}
+                disabled={mission.locked}
+                title="Remove the drawn shape and its route"
+                className="btn-ghost p-1.5"
+              >
+                <LuTrash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="border-b border-panel-700 px-2 py-1.5">
           <button
@@ -273,6 +487,14 @@ export default function Editor() {
           onSelectWaypoint={selectWaypoint}
           onPlacePoint={handlePlacePoint}
           fitTrigger={fitTrigger}
+          drawMode={drawMode}
+          draft={draft}
+          geometry={mission.geometry}
+          generatedLines={generated?.lines ?? []}
+          onDrawVertex={handleDrawVertex}
+          onFinishDrawing={handleFinishDrawing}
+          onCancelDrawing={handleCancelDrawing}
+          onMoveGeometryVertex={handleMoveGeometryVertex}
         />
 
         {mission.locked && (
@@ -327,7 +549,11 @@ export default function Editor() {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {inspectorTab === 'route' ? (
-            <GlobalSettingsPanel disabled={mission.locked} />
+            isMapping ? (
+              <MappingSettingsPanel disabled={mission.locked} />
+            ) : (
+              <GlobalSettingsPanel disabled={mission.locked} />
+            )
           ) : selectedWaypoint != null ? (
             <>
               <WaypointPanel index={selectedWaypoint} disabled={mission.locked} />

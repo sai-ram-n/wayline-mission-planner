@@ -249,6 +249,9 @@ export const DEFAULT_SETTINGS = {
 
 /** Additional defaults for mapping routes (§8.1, §8.2). */
 export const DEFAULT_MAPPING_SETTINGS = {
+  // §8.1: an area route defaults to AGL and 15 m/s, unlike a waypoint route.
+  heightMode: 'AGL',
+  autoFlightSpeed: 15,
   gsd: 5,
   sideOverlapRate: 70,
   forwardOverlapRate: 80,
@@ -263,6 +266,7 @@ export const DEFAULT_MAPPING_SETTINGS = {
 
 export const DEFAULT_LINEAR_SETTINGS = {
   ...DEFAULT_MAPPING_SETTINGS,
+  // §8.2: a linear route defaults back to 10 m/s.
   autoFlightSpeed: 10,
   zigzag: true,
   leftExtension: 50,
@@ -271,6 +275,35 @@ export const DEFAULT_LINEAR_SETTINGS = {
   includeCenterLine: false,
   directionMode: 'parallelToCenterLine',
 };
+
+/**
+ * Sensor resolutions used to turn a GSD into a ground footprint, and from there
+ * into line spacing and photo spacing for mapping routes.
+ *
+ * NOT from the live-site exploration — feature-reference §8 records the GSD and
+ * overlap defaults but not the sensor specifications behind them. These are the
+ * published still-image resolutions for each aircraft's mapping camera, used as a
+ * documented engineering assumption. Our generated distance and photo counts are
+ * therefore our own estimates and are not expected to match the reference
+ * editor's numbers exactly.
+ */
+export const MAPPING_SENSORS = {
+  M30: { width: 4000, height: 3000 },
+  M30T: { width: 4000, height: 3000 },
+  M3E: { width: 5280, height: 3956 },
+  M3T: { width: 4000, height: 3000 },
+  M3TA: { width: 4000, height: 3000 },
+  M3D: { width: 5280, height: 3956 },
+  M3TD: { width: 4000, height: 3000 },
+  M4E: { width: 5280, height: 3956 },
+  M4T: { width: 4000, height: 3000 },
+  M4D: { width: 5280, height: 3956 },
+  M4TD: { width: 4000, height: 3000 },
+  M400: { width: 5280, height: 3956 },
+};
+
+/** Fallback when a model is not listed above. */
+export const DEFAULT_MAPPING_SENSOR = { width: 4000, height: 3000 };
 
 export const ASSIGNMENT_STATUSES = ['pending', 'synced', 'in_progress', 'complete', 'failed'];
 
