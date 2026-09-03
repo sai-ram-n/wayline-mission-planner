@@ -40,11 +40,10 @@ import {
   bearingBetween,
   coverageWedge,
   headingAt,
-  heightAt,
   offsetLatLng,
   waypointBounds,
 } from '../../lib/geo.js';
-import { rangeFor, wideHFov, zoomHFov, zoomRatioAt } from '../../lib/camera.js';
+import { groundClearance, rangeFor, wideHFov, zoomHFov, zoomRatioAt } from '../../lib/camera.js';
 import Map3DOverlay from './Map3DOverlay.jsx';
 import {
   DEFAULT_EXAGGERATION,
@@ -632,7 +631,7 @@ export default function MapCanvas({
         {flat && display.displayCameraCoverage && coverageFov &&
           waypoints.map((waypoint, index) => {
             const heading = headingAt(waypoints, index, settings);
-            const range = rangeFor(heightAt(waypoint, settings));
+            const range = rangeFor(groundClearance(waypoint, settings));
             if (!range) return null;
             const zoomFov = zoomHFov(coverageFov, zoomRatioAt(waypoint, settings));
             const key = waypoint.id ?? index;

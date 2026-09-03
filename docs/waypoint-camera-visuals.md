@@ -192,6 +192,60 @@ The invented `gimbalYaw` tick this document criticised is gone.
 **Also fixed while here:** the display settings menu was `z-50` against Leaflet panes at z-400, so
 it had been rendering *underneath the map* since it was added — unreadable and unclickable.
 
+### 6.1 Altitude mode matters more than it looks
+
+A waypoint's altitude number means different things per `heightMode`, and the wedge range is
+calibrated against a **ground-relative** figure: the reference aircraft read 209 m ASL but
+**116.3 m ALT**, and the ~235 m wedge follows the latter. Feeding `rangeFor` a raw ASL altitude
+draws the wedge roughly twice as large — on exactly the route the ratio was measured from.
+
+`groundClearance` resolves this: ALT and AGL are already ground-relative, and ASL is converted by
+subtracting the takeoff point's own elevation. That assumes flat ground between takeoff and the
+waypoint, which is the assumption the rest of this build already makes, having no elevation service
+(feature-reference §12). With no takeoff point there is nothing to subtract and the altitude is
+used unchanged — a known imprecision, recorded rather than hidden.
+
+A waypoint at or below the takeoff elevation yields no wedge at all, rather than a negative one.
+
+### 6.2 Where the layers deliberately do not appear
+
+| Context | Coverage | Orientation marker | Why |
+|---|---|---|---|
+| Editor, 2D | yes | yes | — |
+| Editor, tilted (3D) | no | no | The tilted view is served by its own SVG overlay; no Leaflet vector layer renders there. Matches the three pre-existing display toggles. |
+| Library preview | no | no | The preview passes no display settings at all, so none of the five toggles apply. |
+| Non-M4TD aircraft | no | yes | No measured field of view (§6, point 4). The orientation marker needs no FOV, so it still draws. |
+| Mapping routes | as above | yes | A 52-waypoint survey grid draws 52 markers. Cluttered, but it is what one-marker-per-waypoint means; the toggle defaults off. |
+
+### 6.3 Verified
+
+Exercised in the browser against real routes, reading the rendered SVG rather than eyeballing it:
+
+| Case | Result |
+|---|---|
+| M4TD waypoint route, all at 1X | 5 amber wedges `#FFDB05` at fill-opacity **0.34**, 5 dashed centre lines, 5 cyan fans, **no green** — correct, the inner wedge is skipped at 1X |
+| One waypoint set to `Zoom 7X` | exactly **one** green wedge `#00D690` at fill-opacity 0.34 with its own dashed centre line |
+| M30T (no measured FOV) | `Display Camera Coverage` **disabled**, 0 amber paths, orientation fans still drawn |
+| Area route, 52 waypoints | 52 fans, 85 paths total, no crash or stall |
+| Tilted 3D view | 0 Leaflet vector paths, the 3D overlay takes over |
+| Library preview | route line and markers only |
+
+Unit coverage: 58 frontend tests, including the altitude-mode conversion, malformed action
+parameters, an unset point of interest, and the wide/zoom nesting invariant.
+
+### 6.4 Bugs this testing round found
+
+Worth recording, because three of them would have shipped:
+
+1. **`groundClearance` threw at runtime.** Its `heightAt` import never landed. `npm run build`
+   passed regardless — Vite does not resolve undefined identifiers — so only a unit test caught it.
+2. **The wedge was ~2× too large on ASL routes**, per §6.1.
+3. **`Number(null)` is `0`**, so a null `aircraftHeading` on an Aircraft Yaw action read as a
+   confident "due north" instead of as absent. `finiteAngle` now rejects null and empty string.
+4. **A route-level manual heading read the waypoint's angle.** A waypoint that had *not* opted into
+   overriding could still steer itself with a stale `heading_angle`. The mode and the angle now
+   always come from the same place.
+
 ## 7. Open questions, listed so they are not quietly guessed
 
 1. What the amber cone is anchored to (§2).

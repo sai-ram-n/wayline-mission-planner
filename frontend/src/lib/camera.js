@@ -20,6 +20,7 @@
  *    ground) and no rule was established for it. `rangeFor` below encodes that
  *    single observation as a ratio and says so.
  */
+import { heightAt } from './geo.js';
 
 /**
  * Horizontal field of view of the wide lens, in degrees, per aircraft model.
@@ -66,10 +67,38 @@ export function zoomHFov(wideFovDeg, zoomRatio) {
 }
 
 /**
+ * A waypoint's height above the ground, in metres.
+ *
+ * This matters, and getting it wrong makes the wedge visibly the wrong size. A
+ * waypoint's altitude number means different things per `heightMode`: ALT is
+ * already relative to the takeoff point and AGL is already above the terrain,
+ * but **ASL is above sea level** and can be hundreds of metres larger.
+ *
+ * The reference's ~235 m wedge came from an aircraft reading 209 m ASL but
+ * 116.3 m ALT, so the ratio in `rangeFor` is calibrated against the
+ * ground-relative figure. Feeding it a raw ASL altitude would roughly double the
+ * wedge on exactly the route it was measured from.
+ *
+ * In ASL mode the takeoff point's own elevation converts one to the other. That
+ * assumes flat ground between takeoff and the waypoint — the same assumption the
+ * rest of this build already makes, having no elevation service
+ * (feature-reference §12). Without a takeoff point there is nothing to subtract,
+ * and the altitude is used as-is.
+ */
+export function groundClearance(waypoint, settings) {
+  const height = heightAt(waypoint, settings);
+  const mode = settings?.heightMode ?? 'ASL';
+  if (mode === 'ALT' || mode === 'AGL') return height;
+
+  const takeoffAlt = Number(settings?.takeOffRefPoint?.alt);
+  return Number.isFinite(takeoffAlt) ? height - takeoffAlt : height;
+}
+
+/**
  * How far the wedge reaches, in metres.
  *
- * Derived from the waypoint's height above the takeoff point. This is the single
- * measured ratio, not a rule DJI documents — see the module note.
+ * Takes a height above ground — see `groundClearance`. This is the single
+ * measured ratio, not a rule DJI documents; see the module note.
  */
 export function rangeFor(heightMetres) {
   const height = Number(heightMetres);

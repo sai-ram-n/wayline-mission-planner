@@ -276,3 +276,7 @@ The camera preview details in §6 are unaffected and were re-confirmed.
 **Implemented 2026-09-03.** The orientation marker and both coverage wedges now exist —
 see `docs/waypoint-camera-visuals.md` §6 for the property-by-property comparison and the five
 places this build knowingly differs from the reference.
+
+**Tested 2026-09-03** across aircraft with and without a measured field of view, mapping routes,
+the tilted view and the library preview — `waypoint-camera-visuals.md` §6.2–§6.4 records where the
+layers deliberately do not appear, and the four bugs the pass found.

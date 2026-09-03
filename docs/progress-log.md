@@ -978,3 +978,46 @@ its own dashed centre line. 47 frontend tests (14 new) and 14 backend tests gree
 ### Still open
 What the amber wedge is anchored to in the reference, and which heading mode selects the
 `wp-follow` model over `wp`. Both are listed in `waypoint-camera-visuals.md` §7 rather than guessed.
+
+---
+
+## Testing the coverage layers, and four bugs it found
+
+**Date:** 2026-09-03 · **Version:** 0.13.1
+
+A deliberate pass over the cases the first implementation had not exercised. Three of the four
+bugs below would have shipped, and one of them could not have been caught by the build.
+
+### Bugs fixed
+
+1. **`groundClearance` threw at runtime** — its `heightAt` import was never written to the file.
+   `npm run build` passed anyway, because Vite does not resolve undefined identifiers; only a unit
+   test surfaced it. A reminder that a green build says nothing about undefined names.
+2. **The wedge was about twice too large on ASL routes.** `heightAt` returns the raw altitude, which
+   in ASL mode is above *sea level*. The measured ratio came from an aircraft reading 209 m ASL but
+   116.3 m ALT, so the wedge must be sized from the ground-relative figure. New `groundClearance`
+   converts: ALT and AGL pass through, ASL subtracts the takeoff point's elevation, and a waypoint
+   at or below that elevation draws nothing rather than a negative wedge.
+3. **`Number(null)` is `0`.** A null `aircraftHeading` on an Aircraft Yaw action therefore read as a
+   confident "due north" rather than as missing. `finiteAngle` now rejects null and empty string.
+4. **A route-level manual heading read the waypoint's own angle.** A waypoint that had not opted
+   into overriding could still steer itself with a stale `heading_angle`. Mode and angle now always
+   come from the same source — the waypoint when it overrides, the route otherwise.
+
+### Cases exercised
+
+Read off the rendered SVG rather than eyeballed. M4TD at 1X: five amber wedges at fill-opacity
+0.34, five dashed centre lines, five cyan fans, no green. One waypoint at `Zoom 7X`: exactly one
+green wedge. M30T: coverage toggle disabled, zero amber paths, fans still drawn. 52-waypoint area
+route: 52 fans, 85 paths, no stall. Tilted 3D view: no Leaflet vector layers, as with the three
+pre-existing display toggles. Library preview: route and markers only, since it passes no display
+settings. All recorded in `waypoint-camera-visuals.md` §6.2 and §6.3.
+
+58 frontend tests (24 new since 0.12.2) and 14 backend tests green; build clean.
+
+### Note on process
+Two waypoints were added by accident during browser testing, by clicking map coordinates read from
+a screenshot after the window had resized underneath them. Both were undone and nothing was saved —
+every route's `updated_at` still predates the session. Clicking by element reference rather than by
+coordinate avoids this and is the better habit for this app, where a stray map click is an edit.
+

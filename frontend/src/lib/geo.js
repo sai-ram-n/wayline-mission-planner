@@ -235,6 +235,18 @@ export function routeToSvgPath(path, width = 160, height = 90, padding = 8) {
 }
 
 /**
+ * A usable angle, or null.
+ *
+ * `Number(null)` is 0 and `Number('')` is 0, so a missing or blank heading would
+ * otherwise read as a confident "due north" rather than as absent.
+ */
+function finiteAngle(value) {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * Which way the aircraft faces at a waypoint, as a 0–360° compass bearing.
  *
  * This resolves the heading the same way the route does, in priority order:
@@ -252,18 +264,23 @@ export function headingAt(waypoints, index, settings) {
   if (!waypoint) return 0;
 
   const yawAction = (waypoint.actions ?? []).find((a) => a.action_type === 'rotateYaw');
-  const fromAction = Number(yawAction?.params?.aircraftHeading);
-  if (Number.isFinite(fromAction)) return (fromAction + 360) % 360;
+  const fromAction = finiteAngle(yawAction?.params?.aircraftHeading);
+  if (fromAction != null) return (fromAction + 360) % 360;
 
-  const mode =
-    waypoint.use_global_heading === false
-      ? waypoint.heading_mode
-      : (settings?.headingMode ?? 'followWayline');
+  // Which mode applies, and therefore which angle: a waypoint that overrides the
+  // route uses its own heading_mode and heading_angle, one that does not uses the
+  // route's. Reading the route's mode against the waypoint's angle would let a
+  // stale per-waypoint value steer a waypoint that had opted out of overriding.
+  const overriding = waypoint.use_global_heading === false;
+  const mode = overriding ? waypoint.heading_mode : (settings?.headingMode ?? 'followWayline');
 
   if (mode === 'manually' || mode === 'fixed') {
-    return (Number(waypoint.heading_angle ?? 0) + 360) % 360;
+    const angle = finiteAngle(overriding ? waypoint.heading_angle : settings?.headingAngle) ?? 0;
+    return (angle + 360) % 360;
   }
 
+  // Point of Interest is a per-waypoint choice only (§5), and an unset POI is
+  // 0,0 — steering at the Atlantic would be worse than following the route.
   if (mode === 'towardPOI' && (waypoint.poi_lat || waypoint.poi_lng)) {
     return bearingBetween(waypoint, { lat: waypoint.poi_lat, lng: waypoint.poi_lng });
   }

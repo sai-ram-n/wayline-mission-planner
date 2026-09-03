@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import {
   MAX_RANGE_M,
   RANGE_TO_ALTITUDE_RATIO,
+  groundClearance,
   hasCoverage,
   rangeFor,
   wideHFov,
@@ -180,4 +181,121 @@ test('following the route faces the next waypoint, and the last holds its arriva
 test('a lone waypoint has a defined heading rather than throwing', () => {
   assert.equal(headingAt([{ lat: 0, lng: 0, actions: [] }], 0, {}), 0);
   assert.equal(headingAt([], 0, {}), 0);
+});
+
+/* ------------------------------------------------- height above the ground */
+
+test('ALT and AGL altitudes are already ground-relative', () => {
+  const waypoint = { height: 120, actions: [] };
+  assert.equal(groundClearance(waypoint, { heightMode: 'ALT' }), 120);
+  assert.equal(groundClearance(waypoint, { heightMode: 'AGL' }), 120);
+  // A takeoff elevation must not be subtracted twice in these modes.
+  assert.equal(
+    groundClearance(waypoint, { heightMode: 'ALT', takeOffRefPoint: { alt: 500 } }),
+    120
+  );
+});
+
+test('an ASL altitude is converted using the takeoff elevation', () => {
+  // The reference route read 209 m ASL over a 92.7 m takeoff point, giving the
+  // 116.3 m ALT the wedge range was actually calibrated against.
+  const waypoint = { height: 209, actions: [] };
+  const settings = { heightMode: 'ASL', takeOffRefPoint: { lat: 0, lng: 0, alt: 92.7 } };
+  assert.ok(Math.abs(groundClearance(waypoint, settings) - 116.3) < 1e-9);
+  // And therefore the right wedge range, rather than roughly double it.
+  assert.ok(Math.abs(rangeFor(groundClearance(waypoint, settings)) - 232.6) < 1e-9);
+  assert.equal(rangeFor(209), 418); // what the bug produced
+});
+
+test('ASL with no takeoff point falls back to the raw altitude', () => {
+  // Nothing to subtract, and no elevation service to ask. Documented, not fixed.
+  assert.equal(groundClearance({ height: 150, actions: [] }, { heightMode: 'ASL' }), 150);
+  assert.equal(
+    groundClearance({ height: 150, actions: [] }, { heightMode: 'ASL', takeOffRefPoint: {} }),
+    150
+  );
+});
+
+test('a per-waypoint altitude override wins over the route altitude', () => {
+  const settings = { heightMode: 'ALT', globalHeight: 100 };
+  assert.equal(groundClearance({ use_global_height: false, height: 40, actions: [] }, settings), 40);
+  assert.equal(groundClearance({ use_global_height: true, height: 40, actions: [] }, settings), 40);
+});
+
+test('a waypoint at or below the takeoff elevation draws no wedge', () => {
+  const settings = { heightMode: 'ASL', takeOffRefPoint: { alt: 200 } };
+  assert.equal(rangeFor(groundClearance({ height: 200, actions: [] }, settings)), 0);
+  assert.equal(rangeFor(groundClearance({ height: 150, actions: [] }, settings)), 0);
+});
+
+/* --------------------------------------------------- malformed action data */
+
+test('a malformed Aircraft Yaw action falls through instead of poisoning the heading', () => {
+  const next = { lat: 0, lng: 1, actions: [] };
+  for (const params of [{}, { aircraftHeading: null }, { aircraftHeading: 'north' }, undefined]) {
+    const waypoints = [{ lat: 0, lng: 0, actions: [{ action_type: 'rotateYaw', params }] }, next];
+    const heading = headingAt(waypoints, 0, {});
+    assert.ok(Number.isFinite(heading), `heading was ${heading} for ${JSON.stringify(params)}`);
+    // Falls back to following the route, which here is due east.
+    assert.ok(Math.abs(heading - 90) < 0.01);
+  }
+});
+
+test('a malformed zoom action falls back to the aircraft default', () => {
+  for (const params of [{}, { zoomRatio: 0 }, { zoomRatio: -3 }, { zoomRatio: 'lots' }]) {
+    assert.equal(zoomRatioAt({ actions: [{ action_type: 'zoom', params }] }, { defaultZoomRatio: 5 }), 5);
+  }
+});
+
+test('a point of interest sitting on the waypoint does not produce NaN', () => {
+  const waypoints = [
+    {
+      lat: 12.34,
+      lng: 56.78,
+      use_global_heading: false,
+      heading_mode: 'towardPOI',
+      poi_lat: 12.34,
+      poi_lng: 56.78,
+      actions: [],
+    },
+  ];
+  assert.ok(Number.isFinite(headingAt(waypoints, 0, {})));
+});
+
+test('an unset point of interest falls back rather than aiming at null island', () => {
+  // poi_lat/poi_lng default to 0,0 — steering every waypoint at the Atlantic
+  // would be worse than following the route.
+  const waypoints = [
+    {
+      lat: 17.38,
+      lng: 78.48,
+      use_global_heading: false,
+      heading_mode: 'towardPOI',
+      poi_lat: 0,
+      poi_lng: 0,
+      actions: [],
+    },
+    { lat: 17.39, lng: 78.48, actions: [] },
+  ];
+  // Follows the route north instead.
+  assert.ok(Math.abs(headingAt(waypoints, 0, {})) < 0.5);
+});
+
+/* ----------------------------------------------- the wide/zoom nesting rule */
+
+test('the zoom wedge always sits inside the wide one', () => {
+  const wide = wideHFov('M4TD');
+  for (const ratio of [1.5, 2, 7, 112]) {
+    assert.ok(zoomHFov(wide, ratio) < wide, `zoom ${ratio} was not narrower`);
+  }
+});
+
+test('a route-wide heading setting applies when the waypoint does not override', () => {
+  const waypoints = [
+    { lat: 0, lng: 0, heading_mode: 'manually', heading_angle: 200, actions: [] },
+    { lat: 0, lng: 1, actions: [] },
+  ];
+  // use_global_heading is undefined, so the route setting decides.
+  assert.equal(headingAt(waypoints, 0, { headingMode: 'manually' }), 0);
+  assert.ok(Math.abs(headingAt(waypoints, 0, { headingMode: 'followWayline' }) - 90) < 0.01);
 });
