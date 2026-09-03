@@ -481,6 +481,51 @@ Consolidated, since the brief calls this model out:
 
 ---
 
+## 9b. Matrice 4TD specifics (explored 2026-09-03)
+
+Observed by creating `WMP-F-M4TD-2D-Explore`, a Waypoint Route on **Matrice 4D Series →
+Matrice 4TD**, and working through it in the 2D top-down view. Differences from the M30T are the
+point of this section; everything not listed matched §5–§6.
+
+**Create Route dialog**
+- Matrice 4D Series offers models **Matrice 4D** *(default)* and **Matrice 4TD**, plus an
+  **Accessories** row: AS1 Speaker, AL1 SpotLight.
+
+**Flight Route Settings**
+- **Camera Settings: `Visible` / `IR`** — two sensors, no Zoom (M30T has WIDE/Zoom/IR).
+- **Smart Low-Light** toggle is present, off by default. It is *not* M30T-only.
+- Defaults matched the M30T: Direct Ascent, Safe Takeoff Altitude 20 m, Waypoint Altitude Mode
+  ASL 209 m, Global Flight Speed 10 m/s, Takeoff Speed 15 m/s, Waypoint Type *Straight route.
+  Aircraft stops*, Aircraft Yaw *Along Route*, Gimbal Control *Manual*, Upon Completion
+  *Return to Home*.
+- **Advanced Settings adds `Bypass Obstacle`** (toggle, off) as the last row. The M30T panel has
+  no such control.
+
+**Virtual-flight action strip** — as §6, plus a sixth entry: **Smart Capture (BETA)**.
+
+**Camera preview** — lens tabs read **WIDE 1X [1] / Zoom 7X [2]** with an IR badge. The M30T reads
+Zoom **5X**.
+
+**Auto-attached attitude actions: three, not four.** Adding a waypoint attaches
+`1-1 Aircraft Yaw`, `1-2 Gimbal Tilt`, `1-3 Camera Zoom`. There is **no Gimbal Yaw**, and the
+default **Zoom Ratio is 1 X** (M30T defaults to 5 X).
+
+**"More" fly-out: 11 entries, not 12.** Start Recording · Stop Recording · Start Timed Interval
+Shot · Start Distance Interval Shot · End Interval Shot · Hover · Aircraft Yaw · Gimbal Tilt ·
+Take Photo · Camera Zoom · Create Folder. **Gimbal Yaw is absent** for this aircraft.
+
+**Start Distance Interval Shot attaches normally here.** It refused to attach on an M30T waypoint
+route (§6), so that restriction is aircraft-specific, not universal. Its editor is *Distance*
+**10 m** with steppers −100 −10 −1 / +1 +10 +100, the Visible/IR lens chips, and a **Follow Route**
+toggle (on by default, dimming the chips as in §6 rule 2).
+
+**Take Photo would not attach**, across three attempts on the same waypoint, including after
+`End Interval Shot` had been added so nothing was recording and no interval was running. The
+pager never advanced past the existing action. Cause not established — recorded as observed, in
+the same spirit as the Start Distance Interval Shot finding in §6.
+
+---
+
 ## 10. [NOT EXPLORED] — deliberate gaps
 
 These were not opened during the exploration session and are **not** described from assumption:

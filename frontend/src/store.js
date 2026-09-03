@@ -39,7 +39,7 @@ const localId = () => `local-${Date.now()}-${(localIdCounter += 1)}`;
  * seeded from the waypoint's own heading and any attitude values already on it,
  * falling back to the documented defaults.
  */
-function attitudeActions(waypoint = {}, settings = {}) {
+function attitudeActions(waypoint = {}, settings = {}, excluded = []) {
   const existing = {};
   for (const action of waypoint.actions ?? []) existing[action.action_type] = action.params ?? {};
 
@@ -47,7 +47,7 @@ function attitudeActions(waypoint = {}, settings = {}) {
     existing.rotateYaw?.aircraftHeading ??
     (waypoint.heading_mode === 'manually' ? (waypoint.heading_angle ?? 0) : 0);
 
-  return [
+  const built = [
     {
       id: localId(),
       action_type: 'rotateYaw',
@@ -58,8 +58,15 @@ function attitudeActions(waypoint = {}, settings = {}) {
     },
     { id: localId(), action_type: 'gimbalYaw', params: { angle: existing.gimbalYaw?.angle ?? 0 } },
     { id: localId(), action_type: 'gimbalTilt', params: { angle: existing.gimbalTilt?.angle ?? 0 } },
-    { id: localId(), action_type: 'zoom', params: { zoomRatio: existing.zoom?.zoomRatio ?? 5 } },
+    {
+      id: localId(),
+      action_type: 'zoom',
+      params: { zoomRatio: existing.zoom?.zoomRatio ?? settings.defaultZoomRatio ?? 5 },
+    },
   ];
+
+  // The M4TD captures three, not four: it has no Gimbal Yaw (§9b).
+  return built.filter((action) => !excluded.includes(action.action_type));
 }
 
 const ATTITUDE_TYPES = ['rotateYaw', 'gimbalYaw', 'gimbalTilt', 'zoom'];
@@ -265,7 +272,12 @@ export const useMissionStore = create((set, get) => ({
     // Mirrors the reference behaviour: with "synchronize attitude" on, a new
     // waypoint captures the current aircraft/gimbal/zoom attitude as actions.
     if (settings.syncAttitudeOnNewWaypoint && meta) {
-      waypoint.actions = attitudeActions(waypoint, settings);
+      const model = meta.aircraft?.[mission.aircraft_series]?.models?.[mission.aircraft_model];
+      waypoint.actions = attitudeActions(
+        waypoint,
+        { ...settings, defaultZoomRatio: model?.defaultZoomRatio },
+        model?.excludedActions ?? []
+      );
     }
 
     get().pushHistory();
@@ -394,10 +406,17 @@ export const useMissionStore = create((set, get) => ({
     get().pushHistory();
     set((s) => {
       const settings = s.mission.settings ?? {};
+      const model =
+        get().meta?.aircraft?.[s.mission.aircraft_series]?.models?.[s.mission.aircraft_model];
       const waypoints = s.mission.waypoints.map((w, i) => {
         if (i !== waypointIndex) return w;
         const others = (w.actions ?? []).filter((a) => !ATTITUDE_TYPES.includes(a.action_type));
-        return { ...w, actions: [...attitudeActions(w, settings), ...others] };
+        const captured = attitudeActions(
+          w,
+          { ...settings, defaultZoomRatio: model?.defaultZoomRatio },
+          model?.excludedActions ?? []
+        );
+        return { ...w, actions: [...captured, ...others] };
       });
       return { mission: { ...s.mission, waypoints }, dirty: true, selectedAction: 0 };
     });

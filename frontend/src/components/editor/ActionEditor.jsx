@@ -17,8 +17,8 @@ import { LuChevronLeft, LuChevronRight, LuPencil, LuPlus, LuTrash2, LuCheck, LuX
 import useMissionStore from '../../store.js';
 import { ACTION_ICONS } from '../../lib/constants.js';
 import {
-  ACTION_MENU,
   ATTITUDE_ACTIONS,
+  actionMenuFor,
   FILENAME_TEMPLATES,
   LENS_LABELS,
   QUICK_ACTIONS,
@@ -405,14 +405,23 @@ export default function ActionEditor({ waypointIndex, disabled = false }) {
     return { type, label: meta.actionLabels[type] ?? type, allowed, reason };
   };
 
-  const menuEntries = ACTION_MENU.map(entryFor);
+  // The menu is aircraft-specific: the M4TD has no Gimbal Yaw at all (§9b).
+  const menuEntries = actionMenuFor(meta, mission.aircraft_series, mission.aircraft_model).map(
+    entryFor
+  );
   const quickEntries = QUICK_ACTIONS.map(entryFor);
 
   const index = selectedAction != null && actions[selectedAction] ? selectedAction : null;
   const action = index != null ? actions[index] : null;
   const Icon = action ? ACTION_ICONS[action.action_type] : null;
 
-  const handleAdd = (type) => addAction(waypointIndex, type, defaultParams(type, settings));
+  const modelEntry = meta.aircraft?.[mission.aircraft_series]?.models?.[mission.aircraft_model];
+  const handleAdd = (type) =>
+    addAction(
+      waypointIndex,
+      type,
+      defaultParams(type, { ...settings, defaultZoomRatio: modelEntry?.defaultZoomRatio })
+    );
 
   return (
     <Section title="Actions" defaultOpen>

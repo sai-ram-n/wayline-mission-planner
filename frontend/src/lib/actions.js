@@ -62,7 +62,8 @@ export function defaultParams(actionType, settings = {}) {
     case 'gimbalTilt':
       return { angle: 0 };
     case 'zoom':
-      return { zoomRatio: 5 };
+      // M30T defaults to 5x, M4TD to 1x (§9b), so the caller passes the model's.
+      return { zoomRatio: settings.defaultZoomRatio ?? 5 };
     case 'hover':
       return { hoverTime: 10 };
     case 'startTimedShoot':
@@ -131,9 +132,17 @@ export function actionAvailability(actionType, state, context = {}) {
     case 'takePhoto':
     case 'takePhotoFixedAngle':
       // Verified: with recording active, Take Photo will not attach (§6 rule 1).
-      return recording
-        ? { allowed: false, reason: 'The camera is recording. Add Stop Recording first.' }
-        : { allowed: true };
+      if (recording) {
+        return { allowed: false, reason: 'The camera is recording. Add Stop Recording first.' };
+      }
+      // Observed again on the M4TD (§9b): a running interval shot blocks it too.
+      if (intervalShooting) {
+        return {
+          allowed: false,
+          reason: 'An interval shot is running. Add End Interval Shot first.',
+        };
+      }
+      return { allowed: true };
 
     case 'startRecord':
       return recording
@@ -172,6 +181,24 @@ export function actionAvailability(actionType, state, context = {}) {
     default:
       return { allowed: true };
   }
+}
+
+/**
+ * The action menu for a given aircraft.
+ *
+ * Not every model offers every action: the Matrice 4TD has no Gimbal Yaw at all
+ * (feature-reference §9b), so it must not appear in its menu.
+ */
+export function actionMenuFor(meta, series, model) {
+  const excluded = meta?.aircraft?.[series]?.models?.[model]?.excludedActions ?? [];
+  if (!excluded.length) return ACTION_MENU;
+  return ACTION_MENU.filter((type) => !excluded.includes(type));
+}
+
+/** The attitude actions this aircraft captures, minus any it does not support. */
+export function attitudeActionsFor(meta, series, model) {
+  const excluded = meta?.aircraft?.[series]?.models?.[model]?.excludedActions ?? [];
+  return ATTITUDE_ACTIONS.filter((type) => !excluded.includes(type));
 }
 
 /**

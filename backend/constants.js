@@ -68,8 +68,19 @@ export const AIRCRAFT = {
     label: 'Matrice 4D Series',
     accessories: ['AS1 Speaker', 'AL1 SpotLight'],
     models: {
-      M4D: { label: 'Matrice 4D', lenses: ['wide', 'zoom'] },
-      M4TD: { label: 'Matrice 4TD', lenses: ['wide', 'zoom', 'ir'] },
+      M4D: { label: 'Matrice 4D', lenses: ['visible'] },
+      M4TD: {
+        label: 'Matrice 4TD',
+        verified: true,
+        // §9b: the Camera Settings chips read Visible / IR — there is no Zoom
+        // chip, even though the preview offers a 7X zoom lens.
+        lenses: ['visible', 'ir'],
+        smartLowLight: true,
+        defaultZoomRatio: 1,
+        // No Gimbal Yaw in this aircraft's action list.
+        excludedActions: ['gimbalYaw'],
+        bypassObstacle: true,
+      },
     },
   },
   M400: {

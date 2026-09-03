@@ -767,3 +767,43 @@ Chrome disconnected immediately after the redraw fix, so **pan and zoom while ti
 re-checked in the browser**. The diagnosis is solid — both pan and zoom froze together, which points
 at the shared memo rather than either handler — but the fix itself is unconfirmed and should be
 exercised before this is considered done.
+
+---
+
+## M4TD exploration — aircraft-specific corrections
+
+**Date:** 2026-09-03 · **Version:** 0.11.1
+
+Created `WMP-F-M4TD-2D-Explore` on the live editor (Matrice 4D Series → Matrice 4TD, Waypoint
+Route) and worked through it in 2D. Written up as feature-reference **§9b**. The 3D view was left
+untouched.
+
+Five differences from the M30T, all now reflected in the code:
+
+| Observed | Was | Now |
+|---|---|---|
+| Camera Settings read **Visible / IR** | M4TD had `wide, zoom, ir` | `visible, ir` |
+| **Smart Low-Light** present on M4TD | modelled as M30T-only | on both |
+| Auto-attach is **3 actions**, no Gimbal Yaw | always 4 | `excludedActions` per model |
+| **Gimbal Yaw absent** from the More menu (11 entries, not 12) | always 12 | menu filtered per aircraft |
+| Default **Zoom Ratio 1×** | always 5× | `defaultZoomRatio` per model |
+
+Also: `Bypass Obstacle` appears in M4TD Advanced Settings, the action strip gains
+**Smart Capture (BETA)**, and the preview lens is **Zoom 7X** (M30T is 5X) — recorded in §9b,
+not yet built.
+
+**Start Distance Interval Shot attaches fine on the M4TD**, confirming the §6 restriction is
+aircraft-specific rather than universal — our `actionAvailability` already scoped it to the M30
+series, so no change needed.
+
+**A new rule was found:** Take Photo would not attach while a distance interval shot was running.
+We only blocked it during recording; it is now blocked during an interval shot too.
+
+**Take Photo would not attach at all on this M4TD waypoint**, even with nothing recording and the
+interval ended — three attempts. Recorded in §9b as observed, cause not established, and *not*
+implemented as a rule, since guessing at the reason would be inventing behaviour.
+
+### Verified
+Our editor on an M4TD waypoint route now shows VISIBLE/IR chips, Smart Low-Light, three
+auto-attached actions (rotateYaw, gimbalTilt, zoom) and a menu with no Gimbal Yaw. 33 frontend and
+10 backend tests green; build clean.
