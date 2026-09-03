@@ -1054,3 +1054,35 @@ that left the file briefly inconsistent, which `npm run build` does not catch fo
 identifiers. Reading the browser console after a change catches it immediately, and is worth doing
 routinely rather than only when something looks wrong.
 
+---
+
+## The two open questions, answered
+
+**Date:** 2026-09-03 · **Version:** 0.13.2 (docs only, no code changed)
+
+Revisited the live FlightHub route with the tab in the foreground, isolating each cone's Cesium
+primitives and reading rendered pixels directly rather than inferring. Both questions from
+`waypoint-camera-visuals.md` §7 are now resolved; full detail and measurements in that document's
+new §7.1–§7.2.
+
+**What the amber cone is anchored to.** Yawed the virtual aircraft through three steps (0° → 24.8°
+→ 32.3°) and re-measured each cone's on-screen bounding box after every step. Green moved every
+time; amber's bounding box came back byte-identical all three times. Amber shares the aircraft's
+apex but is frozen at the waypoint's saved `Aircraft Yaw`, not the live view — a "where you planned
+to point" cone next to the "where you are pointing now" one.
+
+**Which heading mode selects `wp-follow` over `wp`.** Neither — it isn't a heading-mode distinction
+at all. Turned on `Display Gimbal Orientation` and read each glTF model's world position with the
+two different waypoints selected in turn: `wp-follow` moved to match the selection every time,
+`wp` stayed on whichever waypoint wasn't selected. It marks the waypoint the virtual aircraft
+currently occupies, full stop.
+
+No implementation change made from this — it's a documentation update. Whether our flat 2D build's
+selected waypoint should get the same `wp-follow` treatment is a separate decision, not asked for
+here.
+
+### Verified
+Reproduced twice for each question (three yaw steps for the amber test, both waypoints for the
+wp/wp-follow test) rather than trusting a single reading. No route data was edited or saved during
+the session; hidden primitives were restored before leaving the tab.
+

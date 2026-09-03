@@ -82,11 +82,9 @@ at `169.2°` with the same result.
   yaw at both waypoints on this route (both `Aircraft Yaw` actions are `0°`, and both waypoint
   orientation models read heading `0°`).
 
-> **[NOT ESTABLISHED]** Whether the amber cone is anchored to a *specific waypoint* or is a single
-> route-level reference. Both cones appeared to share an apex near the waypoint cluster, but the
-> apex could not be pinned down: at the zoom levels where the wedge is measurable it overflows the
-> viewport, and settling it would have meant flying the virtual aircraft, which was out of scope for
-> this session. **Do not guess this in the implementation** — it needs one more targeted look.
+> **Resolved in §7.1** (second session): amber shares the aircraft's apex but is frozen at the
+> waypoint's saved `Aircraft Yaw`, confirmed by yawing the aircraft 32° and finding amber's on-screen
+> bounding box byte-identical before and after.
 
 ## 3. Measured geometry
 
@@ -135,10 +133,10 @@ screen-space icon, its *apparent* facing changes as the view camera is rotated w
 direction it indicates stays fixed. That reconciles the description of an icon that "faces the front
 direction as the user rotates the camera" — the marker is not tracking the camera, the scene is.
 
-**Two variants exist** — plain `wp` and `wp-follow`. The obvious reading is that `-follow`
-corresponds to a waypoint whose heading follows the route rather than being fixed.
-**[NOT VERIFIED]** — the two waypoints' heading modes were not compared against which model each
-one got, so the mapping is unconfirmed. Worth one check before building it.
+**Two variants exist** — plain `wp` and `wp-follow`.
+> **Resolved in §7.2** (second session): it is not a heading-mode distinction. `wp-follow` marks
+> whichever waypoint the virtual aircraft currently occupies (moves with the selection); `wp` marks
+> every other waypoint.
 
 ## 5. The four display toggles
 
@@ -268,10 +266,54 @@ Worth recording, because three of them would have shipped:
    overriding could still steer itself with a stale `heading_angle`. The mode and the angle now
    always come from the same place.
 
-## 7. Open questions, listed so they are not quietly guessed
+## 7. The two open questions, resolved
 
-1. What the amber cone is anchored to (§2).
-2. Which heading mode selects `wp-follow` over `wp` (§4).
-3. Whether the cones can be drawn at all in a Leaflet 2D build, or whether they are inherently tied
+**Revisited 2026-09-03**, second session, on the same route. Both answered by direct experiment —
+isolating each cone's primitives, toggling visibility, and reading the rendered pixels — rather than
+inferred.
+
+### 7.1 What the amber cone is anchored to
+
+**Amber is fixed at the waypoint's recorded `Aircraft Yaw`. Green is the live virtual-camera
+heading.** Confirmed by yawing the virtual aircraft in three steps (compass reading 0° → 3° → 24.8°
+→ 32.3°) and re-measuring each cone's on-screen bounding box after every step:
+
+| Aircraft heading | Amber bbox (px) | Green bbox (px) |
+|---|---|---|
+| 0° | `minX 650 maxX 709` | `minX 650 maxX 709` (coincide — both cones equal at heading 0) |
+| 24.8° | `minX 650 maxX 709` (unchanged) | `minX 689 maxX 825` (shifted right) |
+| 32.3° | `minX 650 maxX 709` (unchanged) | `minX 693 maxX 856` (shifted further) |
+
+Amber's bounding box is **byte-identical** across all three readings — it never moved, even as the
+aircraft (and the green cone) rotated 32° under it. This route's `Aircraft Yaw` action reads `0°` on
+both waypoints, which is exactly the heading amber sat at throughout. Both cones share the same
+apex (the aircraft's current position, confirmed visually — the two wedges fan out from the same
+marker on screen; see the screenshot logic in this session's transcript).
+
+So §2's original "static reference, anchor unknown" was half right: amber is anchored to the
+**aircraft's position**, same as green, but frozen at the **waypoint's saved heading** rather than
+following the live view. It is a "where you planned to point" cone drawn alongside the "where you
+are currently pointing" one.
+
+### 7.2 Which heading mode selects `wp-follow` over `wp`
+
+**Neither.** `wp-follow.glb` is not a heading-mode variant — it marks whichever waypoint the virtual
+aircraft is **currently parked at** (the selected waypoint), and `wp.glb` marks every other one.
+Confirmed by reading each glTF model's world position with `Display Gimbal Orientation` on:
+
+| Selection | `wp-follow` position | `wp` position | Aircraft position |
+|---|---|---|---|
+| Waypoint 1 selected | matches waypoint 1 | matches waypoint 2 | matches waypoint 1 |
+| Waypoint 2 selected | matches waypoint 2 | matches waypoint 1 | matches waypoint 2 |
+
+The `wp-follow` marker moved when the selection moved, tracking the aircraft exactly. This has
+nothing to do with `heading_mode` — it is presence, not heading, that decides the model. §4's
+implementation note should be read as superseded: there is no "override" to detect and no separate
+model to choose per waypoint based on data; only the *currently active* waypoint would ever need the
+`-follow` variant, and our flat build has no equivalent "currently active" concept to key it to.
+
+### 7.3 Still open
+
+1. Whether the cones can be drawn at all in a Leaflet 2D build, or whether they are inherently tied
    to the virtual-flight mode this build does not implement.
-4. `Bold Line Mode`'s exact line weights (§5).
+2. `Bold Line Mode`'s exact line weights (§5).
