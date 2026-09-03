@@ -221,6 +221,33 @@ test('rejects a zip with no wpmz payload', async () => {
   await assert.rejects(() => parseKmz(buffer), /no wpmz/);
 });
 
+/**
+ * A known limitation, asserted so it stays visible.
+ *
+ * Only the M30 series' droneEnumValue was captured from a real export. Every
+ * other aircraft exports with 0 and cannot be recognised on import, so a
+ * Matrice 4TD route does not survive a round-trip as an M4TD. Inventing DJI's
+ * identifiers would put false data in the file, so this is documented rather
+ * than faked. If the real values are ever obtained, this test fails and points
+ * here.
+ */
+test('aircraft without a captured enum do not survive a round-trip', async () => {
+  const source = await parseKmz(await fixture('reference-empty-route.kmz'));
+  const m4td = { ...source, aircraft_series: 'M4D', aircraft_model: 'M4TD' };
+
+  const back = await parseKmz(await buildKmz(m4td));
+  assert.notEqual(back.aircraft_model, 'M4TD', 'the M4TD now round-trips — update this test');
+  assert.equal(back.aircraft_model, 'M30T', 'the documented fallback');
+  assert.match(back.description, /aircraft could not be identified/);
+});
+
+test('a captured aircraft does survive a round-trip', async () => {
+  const source = await parseKmz(await fixture('reference-empty-route.kmz'));
+  const back = await parseKmz(await buildKmz(source));
+  assert.equal(back.aircraft_model, 'M30T');
+  assert.equal(back.description, 'Imported from KMZ');
+});
+
 test('an unknown aircraft falls back rather than throwing', async () => {
   const source = await parseKmz(await fixture('reference-empty-route.kmz'));
   const kmz = await buildKmz({ ...source, aircraft_series: 'NOPE', aircraft_model: 'NOPE' });

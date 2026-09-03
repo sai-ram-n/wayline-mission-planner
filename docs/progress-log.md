@@ -851,3 +851,43 @@ the arguments in the right order and a `HOST` override for loopback-only.
 Browser: three waypoints placed, badge controls appear on selection, editing mode banner and
 sub-label show, Esc reverts, `Shift`+`Space` took 3 waypoints to 4. Console clean. 33 frontend and
 10 backend tests green; build clean.
+
+---
+
+## End-to-end test — creating a wayline
+
+**Date:** 2026-09-03 · **Version:** 0.12.1
+
+Built `Hyderabad Perimeter Patrol` (Waypoint Route · Matrice 4TD) through the UI and ran it the
+whole way to KMZ and back.
+
+### Passed
+Create Route dialog → editor with the name and aircraft carried through · takeoff reference point ·
+five waypoints, each auto-attaching the correct **three** M4TD actions with no Gimbal Yaw ·
+per-waypoint altitude (300 m) and speed (13 m/s) overrides · Point-of-Interest heading on another
+waypoint · the action state machine (Take Photo blocked while recording, enabled after Stop
+Recording, Photos incrementing) · save with every field persisted · library listing with thumbnail
+path · assignment to two aircraft · full status lifecycle · KMZ export (3,943 bytes) and re-import
+with waypoints, overrides and heading mode all intact.
+
+### Two real bugs found and fixed
+
+**1. Camera Settings were seeded from the wrong aircraft.** A new route took `lenses` from the
+shared defaults, which carry the M30T's `wide, zoom, ir`. On an M4TD — which has only Visible and
+IR — that left **VISIBLE unselected** on a brand-new route and would have written the wrong
+`imageFormat` into an exported KMZ. New routes now seed Camera Settings from the chosen aircraft.
+Verified both ways: M4TD starts VISIBLE+IR, M30T starts WIDE+ZOOM+IR.
+
+**2. Non-M30 aircraft did not survive a KMZ round-trip.** An M4TD route re-imported as an M30T.
+Only the M30 series' `droneEnumValue` (67) was ever captured from a real export; every other
+aircraft exports with 0, which resolves to nothing on the way back.
+
+Inventing DJI's identifiers would put false data into a file that claims to be WPML, so this is
+**documented rather than faked**: `modelFromInfo` now treats 0 as "not recorded" and returns null
+instead of matching by accident, the import states plainly that the aircraft could not be
+identified, and two tests pin the behaviour — one asserting the fallback, one asserting that the
+M30T *does* round-trip. If the real identifiers are ever obtained, the first test fails and points
+at the fix.
+
+### Verified
+33 frontend and 12 backend tests green (2 new), build clean, console clean.

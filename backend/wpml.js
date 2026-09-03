@@ -68,8 +68,22 @@ function aircraftInfo(series, model) {
   };
 }
 
-/** Reverse the lookup on import, so a round-trip lands on the same model. */
+/**
+ * Reverse the lookup on import, so a round-trip lands on the same model.
+ *
+ * **Known limitation.** Only the Matrice 30 series' `droneEnumValue` (67) was
+ * ever observed in a real export (feature-reference §7); no other aircraft's
+ * identifiers were captured, and inventing them would write false data into a
+ * file that claims to be DJI WPML. Those aircraft therefore export with
+ * `droneEnumValue 0` and cannot be recognised on the way back in — a Matrice
+ * 4TD route re-imports as the fallback aircraft, not as itself.
+ *
+ * Returns null when the identifiers do not resolve, so the caller decides what
+ * to do rather than this silently asserting a model.
+ */
 function modelFromInfo(droneEnumValue, droneSubEnumValue) {
+  // 0/0 means "not recorded", not "the aircraft whose values happen to be zero".
+  if (!droneEnumValue) return null;
   for (const [seriesKey, series] of Object.entries(AIRCRAFT)) {
     if (series.droneEnumValue !== droneEnumValue) continue;
     for (const [modelKey, model] of Object.entries(series.models ?? {})) {
@@ -563,9 +577,13 @@ export async function parseKmz(buffer, { name } = {}) {
       : DEFAULT_SETTINGS.lenses,
   };
 
-  const aircraft =
-    modelFromInfo(num(mission.droneInfo?.droneEnumValue), num(mission.droneInfo?.droneSubEnumValue)) ??
-    { aircraft_series: 'M30', aircraft_model: 'M30T' };
+  const resolved = modelFromInfo(
+    num(mission.droneInfo?.droneEnumValue),
+    num(mission.droneInfo?.droneSubEnumValue)
+  );
+  // See modelFromInfo: an unrecognised aircraft falls back rather than failing
+  // the import, and the caller is told so it can surface it.
+  const aircraft = resolved ?? { aircraft_series: 'M30', aircraft_model: 'M30T' };
 
   const templateType = folder.templateType ?? 'waypoint';
   const routeType =
@@ -577,7 +595,9 @@ export async function parseKmz(buffer, { name } = {}) {
 
   return {
     name: name || 'Imported route',
-    description: 'Imported from KMZ',
+    description: resolved
+      ? 'Imported from KMZ'
+      : 'Imported from KMZ — the aircraft could not be identified from the file and has been set to the default.',
     route_type: routeType,
     ...aircraft,
     settings,

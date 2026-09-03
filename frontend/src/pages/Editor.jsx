@@ -34,6 +34,7 @@ import Spinner from '../components/ui/Spinner.jsx';
 import useMissionStore from '../store.js';
 import { computeStats } from '../lib/geo.js';
 import { generateRoute, lineLength, polygonArea } from '../lib/routegen.js';
+import { lensesFor } from '../lib/actions.js';
 import { ROUTE_TYPE_LABELS } from '../lib/constants.js';
 
 export default function Editor() {
@@ -147,6 +148,11 @@ export default function Editor() {
         model = Object.keys(meta?.aircraft?.[series]?.models ?? {})[0] ?? model;
       }
 
+      // Camera Settings must come from the chosen aircraft, not from the shared
+      // defaults: those carry the M30T's wide/zoom/ir, which leaves an M4TD
+      // starting with VISIBLE unselected because it has no wide or zoom sensor.
+      const available = lensesFor(meta, series, model, routeType);
+
       resetMission({
         route_type: routeType,
         aircraft_series: series,
@@ -156,7 +162,11 @@ export default function Editor() {
         // first save goes straight through without prompting again.
         name: aircraft.name ?? '',
         folder_id: aircraft.folder ?? null,
-        settings: { ...(meta?.defaultSettings ?? {}), ...(extra ?? {}) },
+        settings: {
+          ...(meta?.defaultSettings ?? {}),
+          ...(extra ?? {}),
+          ...(available.length ? { lenses: available } : {}),
+        },
       });
       setDraft([]);
       setGenerated(null);

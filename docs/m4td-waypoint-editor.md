@@ -243,6 +243,12 @@ Applied from this document:
 - `Shift`+`Space` insert-waypoint-after and `Shift`+`F` insert-action-after.
 - The four display toggles and the synchronize-attitude toggle grouped as two sections.
 
+**Known limitation found while testing:** a Matrice 4TD route exports to `.kmz` correctly but
+re-imports as the fallback aircraft. Only the M30 series' `droneEnumValue` was ever observed in a
+real export; the M4D series' identifiers were not, and inventing them would write false data into
+the file. The import now states that the aircraft could not be identified rather than silently
+claiming one.
+
 **Not implemented, and why:** virtual-flight/FPV authoring and `Smart Capture (BETA)` need a 3D
 scene and detection service this build has no access to; the Take Photo refusal in §8.3 has no
 established cause, so no rule was invented for it.
