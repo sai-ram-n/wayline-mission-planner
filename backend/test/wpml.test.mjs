@@ -221,31 +221,77 @@ test('rejects a zip with no wpmz payload', async () => {
   await assert.rejects(() => parseKmz(buffer), /no wpmz/);
 });
 
-/**
- * A known limitation, asserted so it stays visible.
- *
- * Only the M30 series' droneEnumValue was captured from a real export. Every
- * other aircraft exports with 0 and cannot be recognised on import, so a
- * Matrice 4TD route does not survive a round-trip as an M4TD. Inventing DJI's
- * identifiers would put false data in the file, so this is documented rather
- * than faked. If the real values are ever obtained, this test fails and points
- * here.
- */
-test('aircraft without a captured enum do not survive a round-trip', async () => {
-  const source = await parseKmz(await fixture('reference-empty-route.kmz'));
-  const m4td = { ...source, aircraft_series: 'M4D', aircraft_model: 'M4TD' };
+/* ------------------------------------------------------ aircraft identity */
 
-  const back = await parseKmz(await buildKmz(m4td));
-  assert.notEqual(back.aircraft_model, 'M4TD', 'the M4TD now round-trips — update this test');
-  assert.equal(back.aircraft_model, 'M30T', 'the documented fallback');
+test('every aircraft survives a round-trip through our own export', async () => {
+  const source = await parseKmz(await fixture('reference-empty-route.kmz'));
+
+  // Only the M30 series' droneEnumValue was ever captured, so the others rely
+  // on the sidecar. All of them must come back as themselves.
+  for (const [series, model, routeType] of [
+    ['M30', 'M30T', 'waypoint'],
+    ['M4D', 'M4TD', 'waypoint'],
+    ['MAVIC3E', 'M3T', 'linear'],
+    ['M400', 'M400', 'area'],
+  ]) {
+    const built = await buildKmz({
+      ...source,
+      aircraft_series: series,
+      aircraft_model: model,
+      route_type: routeType,
+    });
+    const back = await parseKmz(built);
+    assert.equal(back.aircraft_series, series, `${model} series lost`);
+    assert.equal(back.aircraft_model, model, `${model} lost`);
+    assert.equal(back.route_type, routeType, `${model} route type lost`);
+    assert.equal(back.description, 'Imported from KMZ');
+  }
+});
+
+test('the sidecar never replaces the DJI files', async () => {
+  const source = await parseKmz(await fixture('reference-empty-route.kmz'));
+  const kmz = await buildKmz({ ...source, aircraft_series: 'M4D', aircraft_model: 'M4TD' });
+
+  // The two files a real aircraft reads must still be present and namespaced.
+  const template = await unzipText(kmz, 'wpmz/template.kml');
+  const wpml = await unzipText(kmz, 'wpmz/waylines.wpml');
+  assert.ok(template?.includes(NAMESPACE));
+  assert.ok(wpml?.includes(NAMESPACE));
+
+  // And they must not carry invented aircraft identifiers.
+  assert.match(template, /<wpml:droneEnumValue>0<\/wpml:droneEnumValue>/);
+});
+
+test('a foreign kmz with no sidecar still falls back honestly', async () => {
+  // Strip our sidecar to simulate a file exported by someone else.
+  const { default: JSZip } = await import('jszip');
+  const source = await parseKmz(await fixture('reference-empty-route.kmz'));
+  const built = await buildKmz({ ...source, aircraft_series: 'M4D', aircraft_model: 'M4TD' });
+
+  const zip = await JSZip.loadAsync(built);
+  zip.remove('wpmz/wayline-mission-planner.json');
+  const stripped = await zip.generateAsync({ type: 'nodebuffer' });
+
+  const back = await parseKmz(stripped);
+  assert.equal(back.aircraft_model, 'M30T', 'unidentifiable aircraft falls back');
   assert.match(back.description, /aircraft could not be identified/);
 });
 
-test('a captured aircraft does survive a round-trip', async () => {
+test('a sidecar from another tool is ignored', async () => {
+  const { default: JSZip } = await import('jszip');
   const source = await parseKmz(await fixture('reference-empty-route.kmz'));
-  const back = await parseKmz(await buildKmz(source));
+  const built = await buildKmz(source);
+
+  const zip = await JSZip.loadAsync(built);
+  zip.file(
+    'wpmz/wayline-mission-planner.json',
+    JSON.stringify({ generator: 'someone-else', aircraft_model: 'NOPE' })
+  );
+  const tampered = await zip.generateAsync({ type: 'nodebuffer' });
+
+  // Falls back to the WPML identifiers rather than trusting foreign metadata.
+  const back = await parseKmz(tampered);
   assert.equal(back.aircraft_model, 'M30T');
-  assert.equal(back.description, 'Imported from KMZ');
 });
 
 test('an unknown aircraft falls back rather than throwing', async () => {

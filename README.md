@@ -102,11 +102,12 @@ These are deliberate and documented rather than undiscovered.
 - **Four route types are out of scope.** Patrol, Slope, Geometric and Smart 3D Capture appear in
   the Create Route dialog marked unsupported. Patrol is fully documented in the feature reference;
   the other three were never explored.
-- **Only the Matrice 30 series survives a KMZ round-trip as itself.** A real export gave us that
-  aircraft's WPML identifiers; no other model's were ever captured, so the rest export with a zero
-  identifier and re-import as the fallback aircraft. Inventing the values would put false data in a
-  file that claims to be DJI WPML, so the import says plainly that the aircraft could not be
-  identified. Covered by a test.
+- **Aircraft identity travels in a sidecar, not in the WPML.** Only the Matrice 30 series' WPML
+  identifiers were ever captured from a real export. Rather than invent the others — which would
+  put false data in a file a real aircraft reads — an exported `.kmz` carries an extra
+  `wpmz/wayline-mission-planner.json` entry alongside the two spec files. Our own exports therefore
+  round-trip losslessly. A `.kmz` from another tool has no sidecar, so its aircraft is resolved from
+  the WPML identifiers where possible and otherwise reported as unidentifiable.
 - **Merge is not implemented** — neither Merge Mapping Area nor the library's Merge action. The
   source exploration never opened either dialog, so their behaviour is unknown and building them
   would mean inventing it.

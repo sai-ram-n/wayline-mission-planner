@@ -891,3 +891,35 @@ at the fix.
 
 ### Verified
 33 frontend and 12 backend tests green (2 new), build clean, console clean.
+
+---
+
+## KMZ aircraft identity — properly fixed
+
+**Date:** 2026-09-03 · **Version:** 0.12.2
+
+The previous entry documented that non-M30 aircraft do not survive a KMZ round-trip. That was
+honest but it was not a fix, so the M4TD still came back as an M30T. Now fixed.
+
+### Approach
+An exported `.kmz` is a zip. The two files DJI's tooling reads by path —
+`wpmz/template.kml` and `wpmz/waylines.wpml` — stay exactly as the captured schema specifies, with
+`droneEnumValue 0` for aircraft whose identifiers were never observed. Alongside them the archive
+now carries `wpmz/wayline-mission-planner.json` recording the aircraft, payload and route type.
+
+This keeps the invented-data problem out of the file a real aircraft reads, while making our own
+exports round-trip losslessly.
+
+Import order: our sidecar first, then the WPML identifiers, then the honest fallback. The sidecar
+is only trusted when it names an aircraft that exists in the catalogue and was written by us —
+a foreign or hand-edited sidecar is ignored in favour of the WPML.
+
+### Verified
+A real Matrice 4TD route exported at 4,208 bytes with all four archive entries, the WPML still
+carrying `droneEnumValue 0`, and re-imported as **M4D / M4TD / waypoint** with five waypoints,
+the 300 m and 13 m/s overrides, the Point-of-Interest heading, `visible, ir` lenses and the 3/3/3/6/3
+action counts all intact.
+
+14 backend tests (4 new: every aircraft round-trips; the sidecar never replaces the DJI files; a
+foreign kmz without a sidecar still falls back; a sidecar from another tool is ignored) and 33
+frontend tests green.

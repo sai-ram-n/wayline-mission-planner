@@ -243,11 +243,12 @@ Applied from this document:
 - `Shift`+`Space` insert-waypoint-after and `Shift`+`F` insert-action-after.
 - The four display toggles and the synchronize-attitude toggle grouped as two sections.
 
-**Known limitation found while testing:** a Matrice 4TD route exports to `.kmz` correctly but
-re-imports as the fallback aircraft. Only the M30 series' `droneEnumValue` was ever observed in a
-real export; the M4D series' identifiers were not, and inventing them would write false data into
-the file. The import now states that the aircraft could not be identified rather than silently
-claiming one.
+**Aircraft identity through KMZ.** Only the M30 series' `droneEnumValue` was ever observed in a
+real export, so an M4TD would otherwise export with a zero identifier and re-import as the wrong
+aircraft. Rather than invent DJI's values, an export carries an extra
+`wpmz/wayline-mission-planner.json` entry beside the two spec files; the WPML itself stays exactly
+as observed. Our exports round-trip as themselves, and a file from another tool falls back to the
+WPML identifiers, reporting honestly when the aircraft cannot be determined.
 
 **Not implemented, and why:** virtual-flight/FPV authoring and `Smart Capture (BETA)` need a 3D
 scene and detection service this build has no access to; the Take Photo refusal in §8.3 has no

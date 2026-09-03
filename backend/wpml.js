@@ -25,6 +25,23 @@ import {
 const NAMESPACE = 'http://www.dji.com/wpmz/1.0.6';
 const AUTHOR = 'wayline-mission-planner';
 
+/**
+ * Our own metadata, carried alongside the WPML rather than inside it.
+ *
+ * Only the Matrice 30 series' `droneEnumValue` was ever captured from a real
+ * export, so every other aircraft would otherwise export with a zero identifier
+ * and come back unrecognised. Writing invented identifiers into the WPML is not
+ * an option — the file claims to be DJI's format and a real aircraft reads it.
+ *
+ * Instead the two DJI-facing files stay exactly as the schema specifies and this
+ * sidecar records what they cannot. A `.kmz` is a zip; DJI's tooling reads
+ * `wpmz/template.kml` and `wpmz/waylines.wpml` by path, so an extra entry is
+ * inert to it. Import uses the sidecar when present and falls back to the WPML
+ * identifiers when reading someone else's file.
+ */
+const SIDECAR_PATH = 'wpmz/wayline-mission-planner.json';
+const SIDECAR_VERSION = 1;
+
 /* ------------------------------------------------------------------ helpers */
 
 const esc = (value) =>
@@ -358,6 +375,25 @@ export async function buildKmz(wayline) {
   const folder = zip.folder('wpmz');
   folder.file('template.kml', documentXml(wayline, { includeMeta: true, includePlacemarks: true }));
   folder.file('waylines.wpml', documentXml(wayline, { includeMeta: false, includePlacemarks: true }));
+
+  // Sidecar — see SIDECAR_PATH. Never read by DJI tooling, and never a
+  // substitute for the WPML: everything here is also derivable from the route.
+  folder.file(
+    'wayline-mission-planner.json',
+    JSON.stringify(
+      {
+        generator: AUTHOR,
+        sidecarVersion: SIDECAR_VERSION,
+        aircraft_series: wayline.aircraft_series,
+        aircraft_model: wayline.aircraft_model,
+        payload_model: wayline.payload_model ?? null,
+        route_type: wayline.route_type,
+      },
+      null,
+      2
+    )
+  );
+
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
@@ -524,10 +560,25 @@ export async function parseKmz(buffer, { name } = {}) {
     return entry ? entry.async('string') : null;
   };
 
-  const [wpmlText, templateText] = await Promise.all([
+  const [wpmlText, templateText, sidecarText] = await Promise.all([
     read('wpmz/waylines.wpml'),
     read('wpmz/template.kml'),
+    read(SIDECAR_PATH),
   ]);
+
+  /** Our own metadata, when this file came from us. */
+  let sidecar = null;
+  if (sidecarText) {
+    try {
+      const parsed = JSON.parse(sidecarText);
+      // Only trust it if it is actually ours and a version we understand.
+      if (parsed?.generator === AUTHOR && parsed.sidecarVersion <= SIDECAR_VERSION) {
+        sidecar = parsed;
+      }
+    } catch {
+      // A corrupt sidecar must not fail the import; the WPML is the source of truth.
+    }
+  }
 
   if (!wpmlText && !templateText) {
     throw Object.assign(
@@ -577,17 +628,30 @@ export async function parseKmz(buffer, { name } = {}) {
       : DEFAULT_SETTINGS.lenses,
   };
 
-  const resolved = modelFromInfo(
-    num(mission.droneInfo?.droneEnumValue),
-    num(mission.droneInfo?.droneSubEnumValue)
-  );
-  // See modelFromInfo: an unrecognised aircraft falls back rather than failing
-  // the import, and the caller is told so it can surface it.
+  // Our own sidecar first, then the WPML identifiers for someone else's file.
+  // The sidecar is only trusted for an aircraft that actually exists in the
+  // catalogue — otherwise a stale or hand-edited file could reintroduce a model
+  // this build knows nothing about.
+  const sidecarModelExists =
+    !!AIRCRAFT[sidecar?.aircraft_series]?.models?.[sidecar?.aircraft_model];
+  const fromSidecar = sidecarModelExists
+    ? { aircraft_series: sidecar.aircraft_series, aircraft_model: sidecar.aircraft_model }
+    : null;
+  const resolved =
+    fromSidecar ??
+    modelFromInfo(
+      num(mission.droneInfo?.droneEnumValue),
+      num(mission.droneInfo?.droneSubEnumValue)
+    );
+  // An unrecognised aircraft falls back rather than failing the import, and the
+  // caller is told so it can surface it.
   const aircraft = resolved ?? { aircraft_series: 'M30', aircraft_model: 'M30T' };
 
   const templateType = folder.templateType ?? 'waypoint';
   const routeType =
-    Object.entries(TEMPLATE_TYPE).find(([, value]) => value === templateType)?.[0] ?? 'waypoint';
+    (Object.keys(TEMPLATE_TYPE).includes(sidecar?.route_type) ? sidecar.route_type : null) ??
+    Object.entries(TEMPLATE_TYPE).find(([, value]) => value === templateType)?.[0] ??
+    'waypoint';
 
   const waypoints = many(folder.Placemark)
     .map((placemark) => parsePlacemark(placemark, settings))
@@ -600,6 +664,7 @@ export async function parseKmz(buffer, { name } = {}) {
       : 'Imported from KMZ — the aircraft could not be identified from the file and has been set to the default.',
     route_type: routeType,
     ...aircraft,
+    payload_model: sidecar?.payload_model ?? null,
     settings,
     waypoints,
   };
