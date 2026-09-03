@@ -53,6 +53,7 @@ import {
   MAX_PITCH,
   MIN_EXAGGERATION,
   autoExaggeration,
+  metresPerPixel,
   perspectiveFor,
   clampPitch,
   cssTransform,
@@ -61,12 +62,16 @@ import {
 
 /*
   The gimbal orientation fan. The reference draws a small 3D model at the
-  waypoint (waypoint-camera-visuals §4); these two numbers size the flat
-  equivalent so it reads as a heading indicator at normal editing zooms rather
-  than as a coverage area — it is deliberately much shorter than a real wedge.
+  waypoint (waypoint-camera-visuals §4); this is the flat equivalent, deliberately
+  much shorter than a coverage wedge so it reads as a heading indicator.
+
+  Its length is in *screen pixels*, not metres. FlightHub's marker keeps a usable
+  size as you zoom out; a fixed ground length collapses to two or three pixels at
+  route-overview zoom — which is the view you land on after opening a route — and
+  the heading becomes unreadable exactly when it is most wanted.
 */
 const GIMBAL_MARKER_FOV = 55;
-const GIMBAL_MARKER_RANGE_M = 18;
+const GIMBAL_MARKER_PX = 22;
 
 /**
  * A numbered waypoint pin. Built as a divIcon so the index is real text —
@@ -206,6 +211,49 @@ function WaypointBadgeControls({ map, waypoint, editing, onEdit, onRemove }) {
       </button>
     </div>
   );
+}
+
+/**
+ * Per-waypoint gimbal orientation fans, held at a constant on-screen size.
+ *
+ * Redraws on zoom because the metre length backing those pixels changes with it.
+ */
+function GimbalOrientationLayer({ waypoints, settings }) {
+  const map = useMap();
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const redraw = () => setTick((n) => n + 1);
+    map.on('zoomend', redraw);
+    return () => map.off('zoomend', redraw);
+  }, [map]);
+
+  const zoom = map.getZoom();
+
+  return waypoints.map((waypoint, index) => {
+    const metres = GIMBAL_MARKER_PX * metresPerPixel(waypoint.lat, zoom);
+    return (
+      <Polygon
+        key={`gimbal-${waypoint.id ?? index}`}
+        positions={coverageWedge(
+          waypoint.lat,
+          waypoint.lng,
+          headingAt(waypoints, index, settings),
+          GIMBAL_MARKER_FOV,
+          metres,
+          12
+        )}
+        pathOptions={{
+          color: MAP_COLORS.gimbalMarker,
+          weight: 1.5,
+          opacity: 0.95,
+          fillColor: MAP_COLORS.gimbalMarker,
+          fillOpacity: 0.55,
+          interactive: false,
+        }}
+      />
+    );
+  });
 }
 
 /** Exposes the Leaflet instance so toolbar buttons can drive the map. */
@@ -586,36 +634,12 @@ export default function MapCanvas({
           </>
         )}
 
-        {flat && positions.length > 1 && (
-          <>
-            {/* Casing beneath the route keeps it readable over pale tiles. */}
-            <Polyline
-              positions={positions}
-              pathOptions={{
-                color: MAP_COLORS.routeCasing,
-                weight: display.boldLineMode ? 12 : 7,
-                opacity: 0.85,
-              }}
-            />
-            <Polyline
-              positions={positions}
-              pathOptions={{
-                color: MAP_COLORS.route,
-                weight: display.boldLineMode ? 6 : 3,
-                opacity: 1,
-              }}
-            />
-          </>
-        )}
-
-        {flat && takeoffPoint && (
-          <Marker position={[takeoffPoint.lat, takeoffPoint.lng]} icon={takeoffIcon}>
-            <Popup>
-              <span className="text-xs">Reference takeoff point</span>
-            </Popup>
-          </Marker>
-        )}
-
+        {/*
+          Coverage and orientation are drawn before the route so the route line
+          stays crisp on top of them. SVG paints in document order, and a 34%
+          amber fill laid over the polyline tints it and costs the route its
+          contrast — the reference keeps the line above the cone.
+        */}
         {/*
           Camera coverage (docs/waypoint-camera-visuals.md §2).
 
@@ -684,28 +708,39 @@ export default function MapCanvas({
           gimbalYaw action — a rendering the reference has no equivalent for, and
           one that was permanently inert on the M4TD, which has no such action.
         */}
-        {flat && display.displayGimbalOrientation &&
-          waypoints.map((waypoint, index) => (
-            <Polygon
-              key={`gimbal-${waypoint.id ?? index}`}
-              positions={coverageWedge(
-                waypoint.lat,
-                waypoint.lng,
-                headingAt(waypoints, index, settings),
-                GIMBAL_MARKER_FOV,
-                GIMBAL_MARKER_RANGE_M,
-                12
-              )}
+        {flat && display.displayGimbalOrientation && (
+          <GimbalOrientationLayer waypoints={waypoints} settings={settings} />
+        )}
+
+        {flat && positions.length > 1 && (
+          <>
+            {/* Casing beneath the route keeps it readable over pale tiles. */}
+            <Polyline
+              positions={positions}
               pathOptions={{
-                color: MAP_COLORS.gimbalMarker,
-                weight: 1.5,
-                opacity: 0.95,
-                fillColor: MAP_COLORS.gimbalMarker,
-                fillOpacity: 0.55,
-                interactive: false,
+                color: MAP_COLORS.routeCasing,
+                weight: display.boldLineMode ? 12 : 7,
+                opacity: 0.85,
               }}
             />
-          ))}
+            <Polyline
+              positions={positions}
+              pathOptions={{
+                color: MAP_COLORS.route,
+                weight: display.boldLineMode ? 6 : 3,
+                opacity: 1,
+              }}
+            />
+          </>
+        )}
+
+        {flat && takeoffPoint && (
+          <Marker position={[takeoffPoint.lat, takeoffPoint.lng]} icon={takeoffIcon}>
+            <Popup>
+              <span className="text-xs">Reference takeoff point</span>
+            </Popup>
+          </Marker>
+        )}
 
         {/*
           Vertical drop lines (§3). Without an elevation service there is no true

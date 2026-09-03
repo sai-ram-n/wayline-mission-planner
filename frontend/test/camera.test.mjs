@@ -299,3 +299,111 @@ test('a route-wide heading setting applies when the waypoint does not override',
   assert.equal(headingAt(waypoints, 0, { headingMode: 'manually' }), 0);
   assert.ok(Math.abs(headingAt(waypoints, 0, { headingMode: 'followWayline' }) - 90) < 0.01);
 });
+
+/* ------------------------------------------------ Lock Yaw Axis ("fixed") */
+
+test('Lock Yaw Axis holds the previous waypoint’s heading, not a fixed angle', () => {
+  // "fixed" is the enum name, but the control is labelled Lock Yaw Axis and the
+  // aircraft holds the heading it arrived with (§5). Treating it as an angle
+  // pointed the marker and wedge the wrong way.
+  const locked = (extra) => ({
+    use_global_heading: false,
+    heading_mode: 'fixed',
+    heading_angle: 123,
+    actions: [],
+    ...extra,
+  });
+  const waypoints = [
+    // Leg one runs due east, so waypoint 1 faces 90.
+    { lat: 0, lng: 0, actions: [] },
+    locked({ lat: 0, lng: 1 }),
+    locked({ lat: 1, lng: 1 }),
+  ];
+  assert.ok(Math.abs(headingAt(waypoints, 0, {}) - 90) < 0.01);
+  // Both locked waypoints inherit it rather than reading heading_angle 123.
+  assert.ok(Math.abs(headingAt(waypoints, 1, {}) - 90) < 0.01);
+  assert.ok(Math.abs(headingAt(waypoints, 2, {}) - 90) < 0.01);
+});
+
+test('Lock Yaw Axis inherits through an Aircraft Yaw action', () => {
+  const waypoints = [
+    { lat: 0, lng: 0, actions: [{ action_type: 'rotateYaw', params: { aircraftHeading: 270 } }] },
+    { lat: 0, lng: 1, use_global_heading: false, heading_mode: 'fixed', actions: [] },
+  ];
+  assert.equal(headingAt(waypoints, 1, {}), 270);
+});
+
+test('Lock Yaw Axis on the first waypoint falls back to the route', () => {
+  const waypoints = [
+    { lat: 0, lng: 0, use_global_heading: false, heading_mode: 'fixed', heading_angle: 123, actions: [] },
+    { lat: 0, lng: 1, actions: [] },
+  ];
+  // Nothing to hold, so it faces the next waypoint rather than 123.
+  assert.ok(Math.abs(headingAt(waypoints, 0, {}) - 90) < 0.01);
+});
+
+test('a whole route locked to yaw does not recurse away', () => {
+  const waypoints = Array.from({ length: 60 }, (_, i) => ({
+    lat: 0,
+    lng: i * 0.001,
+    use_global_heading: false,
+    heading_mode: 'fixed',
+    actions: [],
+  }));
+  const heading = headingAt(waypoints, 59, {});
+  assert.ok(Number.isFinite(heading));
+  assert.ok(Math.abs(heading - 90) < 0.5);
+});
+
+/* ------------------------------------------ several actions of the same type */
+
+test('the last zoom action on a waypoint wins', () => {
+  const waypoint = {
+    actions: [
+      { action_type: 'zoom', params: { zoomRatio: 2 } },
+      { action_type: 'takePhoto', params: {} },
+      { action_type: 'zoom', params: { zoomRatio: 9 } },
+    ],
+  };
+  assert.equal(zoomRatioAt(waypoint, { defaultZoomRatio: 1 }), 9);
+});
+
+test('the last Aircraft Yaw action on a waypoint wins', () => {
+  const waypoints = [
+    {
+      lat: 0,
+      lng: 0,
+      actions: [
+        { action_type: 'rotateYaw', params: { aircraftHeading: 10 } },
+        { action_type: 'rotateYaw', params: { aircraftHeading: 200 } },
+      ],
+    },
+    { lat: 0, lng: 1, actions: [] },
+  ];
+  assert.equal(headingAt(waypoints, 0, {}), 200);
+});
+
+test('a trailing malformed action does not undo a good earlier one', () => {
+  // Falling back to the aircraft default here would silently reset the lens on
+  // the strength of a broken value, which is worse than keeping the last good one.
+  const waypoint = {
+    actions: [
+      { action_type: 'zoom', params: { zoomRatio: 4 } },
+      { action_type: 'zoom', params: { zoomRatio: null } },
+    ],
+  };
+  assert.equal(zoomRatioAt(waypoint, { defaultZoomRatio: 1 }), 4);
+
+  const waypoints = [
+    {
+      lat: 0,
+      lng: 0,
+      actions: [
+        { action_type: 'rotateYaw', params: { aircraftHeading: 200 } },
+        { action_type: 'rotateYaw', params: { aircraftHeading: null } },
+      ],
+    },
+    { lat: 0, lng: 1, actions: [] },
+  ];
+  assert.equal(headingAt(waypoints, 0, {}), 200);
+});

@@ -113,9 +113,14 @@ export function rangeFor(heightMetres) {
  * M4TD, 5X on the M30T — m4td-waypoint-editor §8).
  */
 export function zoomRatioAt(waypoint, settings) {
-  const action = (waypoint?.actions ?? []).find((a) => a.action_type === 'zoom');
-  const fromAction = Number(action?.params?.zoomRatio);
-  if (Number.isFinite(fromAction) && fromAction > 0) return fromAction;
+  // The last *usable* zoom action wins. A waypoint may carry several, and the
+  // camera ends it at whatever the final one set — but a malformed trailing
+  // value should not throw away a good earlier one and silently reset the lens.
+  const ratios = (waypoint?.actions ?? [])
+    .filter((a) => a.action_type === 'zoom')
+    .map((a) => Number(a.params?.zoomRatio))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (ratios.length) return ratios[ratios.length - 1];
   const fallback = Number(settings?.defaultZoomRatio);
   return Number.isFinite(fallback) && fallback > 0 ? fallback : 1;
 }

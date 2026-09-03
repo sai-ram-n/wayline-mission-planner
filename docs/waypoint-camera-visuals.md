@@ -233,7 +233,29 @@ Exercised in the browser against real routes, reading the rendered SVG rather th
 Unit coverage: 58 frontend tests, including the altitude-mode conversion, malformed action
 parameters, an unset point of interest, and the wide/zoom nesting invariant.
 
-### 6.4 Bugs this testing round found
+### 6.4 A second bug sweep
+
+Four more, found by re-reading the code against the reference rather than by running it:
+
+1. **Lock Yaw Axis pointed the wrong way.** The WPML enum is `fixed`, but the control is labelled
+   *Lock Yaw Axis* and §5 defines it as holding the heading the aircraft had at the **previous**
+   waypoint — it is not a fixed angle. `headingAt` was treating it like Manual and returning
+   `heading_angle`, so both the marker and the wedge faced the wrong direction on any route using
+   it. It now walks back one waypoint at a time, terminating at the first, which has nothing to hold
+   and falls through to following the route.
+2. **The coverage wedges painted over the route line.** SVG draws in document order, so a 34% amber
+   fill was laid across the polyline and cost the route its contrast. Both layers now render before
+   the route, which stays crisp on top — as it does in the reference.
+3. **The orientation fan vanished at overview zoom.** It was a fixed 18 m on the ground, which is
+   two or three pixels once a multi-kilometre route fits the screen — the view you land on when
+   opening a route, and exactly when the heading is most worth seeing. It is now sized in *screen
+   pixels* (22 px) and redrawn on zoom, measured holding at 22 px across four zoom levels.
+4. **The first action of a type won instead of the last.** A waypoint may carry several `zoom` or
+   Aircraft Yaw actions; the camera ends the waypoint wherever the final one left it. Both helpers
+   now take the last *usable* value, so a malformed trailing entry cannot silently reset the lens or
+   the heading either.
+
+### 6.5 Bugs the first testing round found
 
 Worth recording, because three of them would have shipped:
 

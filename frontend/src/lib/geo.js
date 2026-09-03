@@ -263,9 +263,14 @@ export function headingAt(waypoints, index, settings) {
   const waypoint = waypoints?.[index];
   if (!waypoint) return 0;
 
-  const yawAction = (waypoint.actions ?? []).find((a) => a.action_type === 'rotateYaw');
-  const fromAction = finiteAngle(yawAction?.params?.aircraftHeading);
-  if (fromAction != null) return (fromAction + 360) % 360;
+  // The last *usable* Aircraft Yaw action wins, for the same reason the last zoom
+  // does: the aircraft leaves facing wherever the final one pointed it, and a
+  // malformed trailing value should not discard a good earlier one.
+  const yaws = (waypoint.actions ?? [])
+    .filter((a) => a.action_type === 'rotateYaw')
+    .map((a) => finiteAngle(a.params?.aircraftHeading))
+    .filter((n) => n != null);
+  if (yaws.length) return (yaws[yaws.length - 1] + 360) % 360;
 
   // Which mode applies, and therefore which angle: a waypoint that overrides the
   // route uses its own heading_mode and heading_angle, one that does not uses the
@@ -274,9 +279,17 @@ export function headingAt(waypoints, index, settings) {
   const overriding = waypoint.use_global_heading === false;
   const mode = overriding ? waypoint.heading_mode : (settings?.headingMode ?? 'followWayline');
 
-  if (mode === 'manually' || mode === 'fixed') {
+  if (mode === 'manually') {
     const angle = finiteAngle(overriding ? waypoint.heading_angle : settings?.headingAngle) ?? 0;
     return (angle + 360) % 360;
+  }
+
+  // Lock Yaw Axis holds the heading the aircraft had at the *previous* waypoint
+  // (§5) — it is not a fixed angle, despite the enum name. Walking back one
+  // waypoint at a time terminates at the first, which has no previous heading to
+  // hold and so falls through to following the route.
+  if (mode === 'fixed' && index > 0) {
+    return headingAt(waypoints, index - 1, settings);
   }
 
   // Point of Interest is a per-waypoint choice only (§5), and an unset POI is

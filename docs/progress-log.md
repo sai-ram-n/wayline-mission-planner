@@ -1021,3 +1021,36 @@ a screenshot after the window had resized underneath them. Both were undone and 
 every route's `updated_at` still predates the session. Clicking by element reference rather than by
 coordinate avoids this and is the better habit for this app, where a stray map click is an edit.
 
+---
+
+## A second bug sweep over the coverage layers
+
+**Date:** 2026-09-03 · **Version:** 0.13.2
+
+Four more bugs, found by re-reading the implementation against the reference rather than by
+running it. Details in `waypoint-camera-visuals.md` §6.4.
+
+1. **Lock Yaw Axis pointed the wrong way.** The enum is `fixed`, but the control is *Lock Yaw Axis*
+   and §5 defines it as holding the previous waypoint's heading — not a fixed angle. `headingAt`
+   treated it as Manual and returned `heading_angle`, so the marker and wedge faced wrongly on any
+   route using it. It now inherits backwards, terminating at the first waypoint.
+2. **Coverage painted over the route line.** SVG draws in document order and a 34% fill was tinting
+   the polyline. Both layers now render before the route.
+3. **The orientation fan vanished when zoomed out.** A fixed 18 m on the ground is ~3 px once a
+   multi-kilometre route fits the screen — the default view after opening a route. It is now sized
+   in screen pixels and redrawn on zoom; measured holding at 22 px across four zoom levels.
+4. **The first action of a type won instead of the last.** A waypoint can carry several `zoom` or
+   Aircraft Yaw actions, and the camera ends where the final one left it. Both now take the last
+   *usable* value, so a malformed trailing entry cannot reset the lens or heading.
+
+### Verified
+Clean page load with no console errors; DOM order confirms coverage and fans beneath the route
+casing and line; five fans at 22 px across four zoom levels; wedges carry `pointer-events: none` so
+map clicks pass through to add waypoints. 65 frontend tests (7 new) and 14 backend tests green.
+
+### Note
+Two of the bugs fixed in 0.13.1 and one transient breakage here shared a cause: a multi-step edit
+that left the file briefly inconsistent, which `npm run build` does not catch for undefined
+identifiers. Reading the browser console after a change catches it immediately, and is worth doing
+routinely rather than only when something looks wrong.
+
