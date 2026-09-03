@@ -12,7 +12,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { LuSettings2 } from 'react-icons/lu';
-import { ToggleField } from '../ui/Field.jsx';
+import { NumberStepper, ToggleField } from '../ui/Field.jsx';
 
 const STORAGE_KEY = 'wmp.displaySettings';
 
@@ -80,6 +80,8 @@ export default function DisplaySettingsMenu({
   onChange,
   syncAttitude,
   onSyncAttitudeChange,
+  minAltitudeAlert,
+  onMinAltitudeAlertChange,
   disabled = false,
 }) {
   const [open, setOpen] = useState(false);
@@ -150,6 +152,21 @@ export default function DisplaySettingsMenu({
               onChange={onSyncAttitudeChange}
               disabled={disabled}
             />
+
+            <div className="mt-2">
+              <NumberStepper
+                label="Min Flight Route Altitude Alert (AGL)"
+                hint="Warn when a waypoint sits below this height above ground."
+                value={minAltitudeAlert ?? 20}
+                onChange={onMinAltitudeAlertChange}
+                min={0}
+                max={1500}
+                steps={[1, 10]}
+                unit="m"
+                decimals={1}
+                disabled={disabled}
+              />
+            </div>
           </div>
         </div>
       )}

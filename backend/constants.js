@@ -264,6 +264,10 @@ export const DEFAULT_SETTINGS = {
   lenses: ['wide', 'zoom', 'ir'],
   smartLowLight: false,
   syncAttitudeOnNewWaypoint: true,
+  // Editor settings panel, m4td-waypoint-editor.md §4.
+  minAltitudeAlertAGL: 20,
+  // Advanced Settings, M4-series only (§3).
+  bypassObstacle: false,
 };
 
 /** Additional defaults for mapping routes (§8.1, §8.2). */

@@ -209,6 +209,17 @@ export default function GlobalSettingsPanel({ disabled = false }) {
           disabled={disabled}
         />
 
+        {/* Last row of Advanced Settings on M4-series aircraft (§3). */}
+        {modelEntry?.bypassObstacle && (
+          <ToggleField
+            label="Bypass Obstacle"
+            hint="Let the aircraft route around obstacles it detects along the flight path."
+            value={!!settings.bypassObstacle}
+            onChange={set('bypassObstacle')}
+            disabled={disabled}
+          />
+        )}
+
         <ToggleField
           label="Synchronize attitude on new waypoint"
           hint={HINTS.syncAttitude}

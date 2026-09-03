@@ -290,6 +290,55 @@ export const useMissionStore = create((set, get) => ({
     return waypoint;
   },
 
+  /** Insert a waypoint at a position, used by the Shift+Space shortcut. */
+  insertWaypoint(index, partial) {
+    const { mission, meta } = get();
+    const settings = mission.settings ?? {};
+    const waypoint = {
+      id: localId(),
+      lat: partial.lat,
+      lng: partial.lng,
+      height: partial.height ?? settings.globalHeight ?? 100,
+      ellipsoid_height: null,
+      speed: null,
+      heading_mode: settings.headingMode ?? 'followWayline',
+      heading_angle: 0,
+      heading_path_mode: 'followBadArc',
+      poi_lat: 0,
+      poi_lng: 0,
+      poi_alt: 0,
+      turn_mode: settings.turnMode ?? 'toPointAndStopWithDiscontinuityCurvature',
+      turn_damping_dist: 0.2,
+      use_global_speed: true,
+      use_global_height: true,
+      use_global_heading: true,
+      use_global_turn: true,
+      use_straight_line: settings.useStraightLine ?? true,
+      actions: [],
+      ...partial,
+    };
+
+    if (settings.syncAttitudeOnNewWaypoint && meta) {
+      const model = meta.aircraft?.[mission.aircraft_series]?.models?.[mission.aircraft_model];
+      waypoint.actions = attitudeActions(
+        waypoint,
+        { ...settings, defaultZoomRatio: model?.defaultZoomRatio },
+        model?.excludedActions ?? []
+      );
+    }
+
+    get().pushHistory();
+    let placed = index;
+    set((s) => {
+      const waypoints = [...s.mission.waypoints];
+      placed = Math.min(Math.max(index, 0), waypoints.length);
+      waypoints.splice(placed, 0, waypoint);
+      return { mission: { ...s.mission, waypoints }, dirty: true };
+    });
+    set({ selectedWaypoint: placed, selectedAction: null });
+    return waypoint;
+  },
+
   updateWaypoint(index, fields) {
     set((s) => {
       const waypoints = s.mission.waypoints.map((w, i) => (i === index ? { ...w, ...fields } : w));

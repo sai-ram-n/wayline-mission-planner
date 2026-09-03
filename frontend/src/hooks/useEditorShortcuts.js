@@ -23,7 +23,7 @@ export default function useEditorShortcuts({ enabled = true, onShowHelp } = {}) 
     const handler = (event) => {
       // Never steal a key from a field the user is typing in.
       if (event.target?.closest?.(FORM_ELEMENTS)) return;
-      // Leave browser and OS combinations alone.
+      // Leave browser and OS combinations alone. Shift is ours (insert-after).
       if (event.metaKey || event.ctrlKey || event.altKey) return;
 
       const state = useMissionStore.getState();
@@ -87,6 +87,19 @@ export default function useEditorShortcuts({ enabled = true, onShowHelp } = {}) 
           break;
         }
 
+        // Shift+Space inserts a waypoint after the current one, midway to the
+        // next, matching the reference's insert-after binding.
+        case ' ': {
+          if (locked || !event.shiftKey || selectedWaypoint == null) return;
+          event.preventDefault();
+          const current = waypoints[selectedWaypoint];
+          const next = waypoints[selectedWaypoint + 1];
+          const lat = next ? (current.lat + next.lat) / 2 : current.lat + 0.0004;
+          const lng = next ? (current.lng + next.lng) / 2 : current.lng + 0.0004;
+          state.insertWaypoint(selectedWaypoint + 1, { lat, lng });
+          break;
+        }
+
         case '?': {
           event.preventDefault();
           onShowHelp?.();
@@ -109,6 +122,7 @@ export const SHORTCUTS = [
   { keys: '← / →', description: 'Previous / next action on the selected waypoint' },
   { keys: 'F', description: 'Add Take Photo (Fixed Angle) to the selected waypoint' },
   { keys: 'Shift + F', description: 'Insert Take Photo (Fixed Angle) after the selected action' },
+  { keys: 'Shift + Space', description: 'Insert a waypoint after the selected one' },
   { keys: 'Delete', description: 'Remove the selected action, or the waypoint' },
   { keys: 'Alt + ↑ / ↓', description: 'Reorder the focused waypoint in the list' },
   { keys: 'Esc', description: 'Cancel drawing an area or centre line' },

@@ -29,10 +29,10 @@ function ActionIcons({ actions, waypointIndex, selectedAction, isSelected, onSel
               event.stopPropagation();
               onSelectAction(waypointIndex, actionIndex);
             }}
-            className={`rounded p-1 transition-colors ${
+            className={`rounded-sm p-1 transition-colors ${
               active
                 ? 'bg-accent text-white'
-                : 'text-slate-500 hover:bg-panel-700 hover:text-slate-300'
+                : 'text-slate-400 hover:bg-panel-700 hover:text-slate-200'
             }`}
           >
             {Icon ? <Icon className="h-3 w-3" /> : <span className="text-[9px]">•</span>}
@@ -51,6 +51,8 @@ export default function WaypointList({
   onSelectAction,
   onRemove,
   onReorder,
+  /** Index currently in "changing waypoint location" mode, or null. */
+  editingIndex = null,
 }) {
   // Rendered highlight state, plus refs holding the same values so the pointerup
   // handler can read them synchronously. The commit must not live inside a state
@@ -157,7 +159,11 @@ export default function WaypointList({
               }
             }}
             className={`group cursor-pointer px-2 py-1.5 transition-colors ${
-              isSelected ? 'bg-panel-700/70' : 'hover:bg-panel-800'
+              editingIndex === index
+                ? 'bg-[#ff9500]/25'
+                : isSelected
+                  ? 'bg-panel-700/70'
+                  : 'hover:bg-panel-800'
             } ${isDropTarget ? 'ring-1 ring-inset ring-accent' : ''} ${
               isDragging ? 'opacity-40' : ''
             }`}
@@ -175,12 +181,19 @@ export default function WaypointList({
                 <LuGripVertical aria-hidden className="h-3.5 w-3.5" />
               </span>
 
-              <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
-                  index === 0 ? 'bg-emerald-500 text-emerald-950' : 'bg-accent text-white'
-                }`}
-              >
-                {index === 0 ? 'S' : index + 1}
+              {/*
+                A green downward triangle followed by the index, as the reference
+                waypoint list draws it (m4td-waypoint-editor.md §5) — not a
+                numbered circle.
+              */}
+              <span className="flex shrink-0 items-center gap-1">
+                <span
+                  aria-hidden
+                  className={`inline-block h-0 w-0 border-x-[5px] border-t-[8px] border-x-transparent ${
+                    editingIndex === index ? 'border-t-[#ff9500]' : 'border-t-mint'
+                  }`}
+                />
+                <span className="text-[11px] font-medium text-slate-200">{index + 1}</span>
               </span>
 
               <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-400">
@@ -202,6 +215,10 @@ export default function WaypointList({
                 <LuTrash2 className="h-3 w-3" />
               </button>
             </div>
+
+            {editingIndex === index && (
+              <p className="mt-0.5 pl-9 text-[10px] text-[#ff9500]">Changing waypoint location</p>
+            )}
 
             {waypoint.actions?.length > 0 && (
               <div className="mt-1 pl-9">

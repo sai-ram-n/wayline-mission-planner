@@ -41,14 +41,15 @@ export const ACTION_ICONS = {
 
 /** Map colours. Kept here so the polyline, markers and legend agree. */
 export const MAP_COLORS = {
-  route: '#3b9dff',
-  routeCasing: '#0b1a2b',
-  marker: '#3b9dff',
-  markerSelected: '#f7b500',
-  start: '#2ecc71',
-  takeoff: '#f7b500',
-  area: '#3b9dff',
-  generated: '#2ecc71',
+  route: '#2d8cf0',
+  routeCasing: '#101010',
+  marker: '#2d8cf0',
+  // Orange is the reference editor's "editing waypoint" state colour.
+  markerSelected: '#ff9500',
+  start: '#00ee8b',
+  takeoff: '#ff9500',
+  area: '#2d8cf0',
+  generated: '#00ee8b',
 };
 
 /** Default map view when a mission has no waypoints yet — Hyderabad, Telangana. */

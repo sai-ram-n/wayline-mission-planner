@@ -42,6 +42,8 @@ export const settingsSchema = z
     lenses: z.array(z.enum(LENSES)).optional(),
     smartLowLight: z.boolean().optional(),
     syncAttitudeOnNewWaypoint: z.boolean().optional(),
+    minAltitudeAlertAGL: z.number().min(0).max(1500).optional(),
+    bypassObstacle: z.boolean().optional(),
 
     // mapping routes
     gsd: z.number().min(0.1).max(100).optional(),

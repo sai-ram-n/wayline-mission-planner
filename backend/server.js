@@ -80,7 +80,9 @@ app.use(notFound);
 app.use(errorHandler);
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  // Express takes (port, host, callback). Defaults to all interfaces so the API
+  // is reachable from the LAN; set HOST=127.0.0.1 to keep it loopback-only.
+  app.listen(PORT, process.env.HOST || '0.0.0.0', () => {
     console.log(`${APP_NAME} API v${VERSION} listening on http://localhost:${PORT}/api`);
   });
 }

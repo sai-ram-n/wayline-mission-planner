@@ -3,7 +3,7 @@
  * inspector on the right — route settings, or the selected waypoint's settings
  * and its actions.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   LuSave,
@@ -81,6 +81,11 @@ export default function Editor() {
   const [searchParams] = useSearchParams();
   const [display, setDisplay] = useState(loadDisplaySettings);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // "Changing waypoint location" mode (§7): the pre-edit position is kept so
+  // Esc can put the waypoint back exactly where it was.
+  const [editingIndex, setEditingIndex] = useState(null);
+  const editOrigin = useRef(null);
+  const editingRef = useRef(null);
 
   // Selecting a waypoint switches the inspector to it, as the reference does.
   useEffect(() => {
@@ -310,6 +315,53 @@ export default function Editor() {
     }
   };
 
+  /* ------------------------------------------- changing a waypoint location */
+
+  const beginEditWaypoint = (index) => {
+    if (mission.locked) return showToast('This wayline is locked');
+    const waypoint = mission.waypoints[index];
+    if (!waypoint) return;
+    editOrigin.current = { lat: waypoint.lat, lng: waypoint.lng };
+    editingRef.current = index;
+    setEditingIndex(index);
+    selectWaypoint(index);
+  };
+
+  const confirmEditWaypoint = useCallback(() => {
+    editOrigin.current = null;
+    editingRef.current = null;
+    setEditingIndex(null);
+  }, []);
+
+  // The revert happens in the handler body, never inside a setState updater:
+  // updaters must stay pure and React re-invokes them.
+  const cancelEditWaypoint = useCallback(() => {
+    const origin = editOrigin.current;
+    const index = editingRef.current;
+    if (index != null && origin) moveWaypoint(index, origin.lat, origin.lng);
+    editOrigin.current = null;
+    editingRef.current = null;
+    setEditingIndex(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Space confirms, Esc reverts — the reference's own bindings for this mode.
+  useEffect(() => {
+    if (editingIndex == null) return undefined;
+    const onKey = (event) => {
+      if (event.target?.closest?.('input, textarea, select')) return;
+      if (event.key === ' ') {
+        event.preventDefault();
+        confirmEditWaypoint();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelEditWaypoint();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editingIndex, confirmEditWaypoint, cancelEditWaypoint]);
+
   const handleClear = () => {
     if (!mission.waypoints.length) return;
     // eslint-disable-next-line no-alert
@@ -394,6 +446,8 @@ export default function Editor() {
             onChange={setDisplay}
             syncAttitude={mission.settings?.syncAttitudeOnNewWaypoint}
             onSyncAttitudeChange={(v) => setSettings({ syncAttitudeOnNewWaypoint: v })}
+            minAltitudeAlert={mission.settings?.minAltitudeAlertAGL}
+            onMinAltitudeAlertChange={(v) => setSettings({ minAltitudeAlertAGL: v })}
             disabled={mission.locked}
           />
         </div>
@@ -515,6 +569,7 @@ export default function Editor() {
             onSelectAction={selectAction}
             onRemove={removeWaypoint}
             onReorder={reorderWaypoints}
+            editingIndex={editingIndex}
           />
         </div>
 
@@ -547,6 +602,11 @@ export default function Editor() {
           onMoveGeometryVertex={handleMoveGeometryVertex}
           display={display}
           settings={mission.settings}
+          editingIndex={editingIndex}
+          onEditWaypoint={beginEditWaypoint}
+          onConfirmEdit={confirmEditWaypoint}
+          onCancelEdit={cancelEditWaypoint}
+          onRemoveWaypoint={removeWaypoint}
         />
 
         {mission.locked && (

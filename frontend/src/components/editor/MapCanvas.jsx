@@ -18,7 +18,17 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
-import { LuCrosshair, LuLayers, LuMaximize, LuBox, LuUndo2 } from 'react-icons/lu';
+import {
+  LuBox,
+  LuCheck,
+  LuCrosshair,
+  LuLayers,
+  LuMaximize,
+  LuPencil,
+  LuTrash2,
+  LuUndo2,
+  LuX,
+} from 'react-icons/lu';
 import {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -45,8 +55,12 @@ import {
  * A numbered waypoint pin. Built as a divIcon so the index is real text —
  * readable, selectable and styleable without generating images.
  */
-function waypointIcon(index, { selected, isStart, isEnd }) {
-  const fill = selected ? MAP_COLORS.markerSelected : isStart ? MAP_COLORS.start : MAP_COLORS.marker;
+function waypointIcon(index, { selected, isStart, isEnd, editing }) {
+  const fill = editing || selected
+    ? MAP_COLORS.markerSelected
+    : isStart
+      ? MAP_COLORS.start
+      : MAP_COLORS.marker;
   const ring = selected ? '#fff' : 'rgba(255,255,255,.55)';
   const label = isStart ? 'S' : String(index + 1);
 
@@ -130,6 +144,53 @@ function FitOnLoad({ waypoints, trigger }) {
   return null;
 }
 
+/**
+ * Pencil and trash pinned just above the selected waypoint's marker (§7).
+ *
+ * Rendered outside the Leaflet panes so they inherit app styling, and
+ * repositioned on every map move so they stay attached to the marker.
+ */
+function WaypointBadgeControls({ map, waypoint, editing, onEdit, onRemove }) {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!map) return undefined;
+    const redraw = () => setTick((n) => n + 1);
+    const events = ['move', 'zoom', 'resize'];
+    events.forEach((event) => map.on(event, redraw));
+    return () => events.forEach((event) => map.off(event, redraw));
+  }, [map]);
+
+  if (!map) return null;
+  const point = map.latLngToContainerPoint([waypoint.lat, waypoint.lng]);
+
+  return (
+    <div
+      className="absolute z-[460] flex -translate-x-1/2 items-center gap-0.5 rounded-sm border border-panel-600 bg-panel-900/95 px-1 py-0.5 shadow-lg"
+      style={{ left: point.x, top: point.y - 34 }}
+    >
+      <button
+        type="button"
+        onClick={onEdit}
+        title="Change waypoint location"
+        className={`rounded-sm p-1 transition-colors ${
+          editing ? 'bg-[#ff9500] text-black' : 'text-slate-300 hover:bg-panel-700'
+        }`}
+      >
+        <LuPencil className="h-3 w-3" />
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        title="Delete waypoint"
+        className="rounded-sm p-1 text-slate-300 transition-colors hover:bg-red-950 hover:text-red-400"
+      >
+        <LuTrash2 className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
 /** Exposes the Leaflet instance so toolbar buttons can drive the map. */
 function MapRefBridge({ onReady }) {
   const map = useMap();
@@ -163,6 +224,12 @@ export default function MapCanvas({
   display = {},
   // Route settings, used by the tilted view to resolve waypoint altitudes.
   settings = {},
+  // Index being repositioned, plus its confirm/cancel handlers (§7).
+  editingIndex = null,
+  onEditWaypoint,
+  onConfirmEdit,
+  onCancelEdit,
+  onRemoveWaypoint,
 }) {
   const [basemap, setBasemap] = useState('street');
   const mapRef = useRef(null);
@@ -336,6 +403,42 @@ export default function MapCanvas({
         gradient makes that deliberate rather than looking like the map failed
         to load.
       */}
+      {!readOnly && !is3D && selectedIndex != null && waypoints[selectedIndex] && (
+        <WaypointBadgeControls
+          map={mapRef.current}
+          waypoint={waypoints[selectedIndex]}
+          editing={editingIndex === selectedIndex}
+          onEdit={() => onEditWaypoint?.(selectedIndex)}
+          onRemove={() => onRemoveWaypoint?.(selectedIndex)}
+        />
+      )}
+
+      {editingIndex != null && (
+        <div className="pointer-events-none absolute inset-x-0 top-20 z-[470] flex justify-center">
+          <div className="pointer-events-auto flex items-center gap-4 rounded-sm bg-[#ff9500]/90 px-6 py-2 text-sm font-medium text-black shadow-xl">
+            Editing waypoint
+            <button
+              type="button"
+              onClick={() => onConfirmEdit?.()}
+              title="Confirm"
+              className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs hover:bg-black/15"
+            >
+              <LuCheck className="h-4 w-4" />
+              <span className="font-mono">[Space]</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onCancelEdit?.()}
+              title="Cancel"
+              className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs hover:bg-black/15"
+            >
+              <LuX className="h-4 w-4" />
+              <span className="font-mono">[Esc]</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {is3D && (
         <div
           aria-hidden
@@ -545,6 +648,7 @@ export default function MapCanvas({
               selected: index === selectedIndex,
               isStart: index === 0,
               isEnd: index === waypoints.length - 1 && waypoints.length > 1,
+              editing: index === editingIndex,
             })}
             draggable={!readOnly}
             eventHandlers={{

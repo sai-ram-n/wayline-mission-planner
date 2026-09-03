@@ -807,3 +807,47 @@ implemented as a rule, since guessing at the reason would be inventing behaviour
 Our editor on an M4TD waypoint route now shows VISIBLE/IR chips, Smart Low-Light, three
 auto-attached actions (rotateYaw, gimbalTilt, zoom) and a menu with no Gimbal Yaw. 33 frontend and
 10 backend tests green; build clean.
+
+---
+
+## M4TD waypoint editor — full exploration and implementation
+
+**Date:** 2026-09-03 · **Version:** 0.12.0
+
+Explored every panel, control, icon and shortcut of the M4TD waypoint editor in 2D and wrote it up
+as **`docs/m4td-waypoint-editor.md`**, then built from it. The 3D view was left alone.
+
+### Implemented
+- **Palette matched to the measured values** (§10): neutral greys `#101010 / #1b1b1b / #232323 /
+  #2f2f2f / #3c3c3c`, accent `#2d8cf0`, mint `#00ee8b`, 2/4/8 px radii. The chrome was blue-tinted
+  before; the reference is neutral.
+- **Green ▼ triangle waypoint markers** in the list, replacing numbered circles (§5).
+- **Waypoint badge controls** — pencil and trash pinned above the selected marker, repositioned as
+  the map moves (§7).
+- **"Editing waypoint" mode** — orange banner with ✓ `[Space]` / ✗ `[Esc]`, the row turning orange
+  with the sub-label *Changing waypoint location*, and Esc restoring the original position.
+- **`Min Flight Route Altitude Alert (AGL)`**, default 20 m, in editor settings (§4).
+- **`Bypass Obstacle`** as the last Advanced Settings row, M4-series only (§3).
+- **`Shift`+`Space`** inserts a waypoint after the selected one, midway to the next (§9), via a new
+  `insertWaypoint` store action.
+
+### Not implemented, and why
+Virtual-flight/FPV authoring and `Smart Capture (BETA)` need a 3D scene and detection service this
+build has no access to. The Take Photo refusal recorded in §8 has no established cause, so no rule
+was inferred from it.
+
+### On assets
+Layout, spacing, colour values, control types and behaviour are reproduced. Icon and image files
+are not: this build keeps its own icon set, matched to each control's shape and meaning, per the
+project's no-third-party-assets rule.
+
+### Bug found outside my own changes
+`backend/server.js` had an uncommitted edit, `app.listen('0.0.0.0', PORT, ...)`. Express takes
+`(port, host, callback)`, so the server was trying to bind port `'0.0.0.0'` → `-1` and crashed with
+`EADDRINUSE`; the API had been down. The intent — expose the API on the LAN — is preserved, with
+the arguments in the right order and a `HOST` override for loopback-only.
+
+### Verified
+Browser: three waypoints placed, badge controls appear on selection, editing mode banner and
+sub-label show, Esc reverts, `Shift`+`Space` took 3 waypoints to 4. Console clean. 33 frontend and
+10 backend tests green; build clean.
