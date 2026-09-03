@@ -50,7 +50,28 @@ export const MAP_COLORS = {
   takeoff: '#ff9500',
   area: '#2d8cf0',
   generated: '#00ee8b',
+
+  /*
+    Camera coverage, measured off the live Cesium scene — see
+    docs/waypoint-camera-visuals.md §1. The amber wedge is the wide lens, the
+    green one the same view narrowed by the zoom ratio. Each is drawn as a
+    translucent fill, a near-opaque outline and a dashed centre arrow, which is
+    how FlightHub builds them.
+  */
+  coverageWide: '#FFDB05',
+  coverageZoom: '#00D690',
+
+  /*
+    The per-waypoint gimbal orientation marker. FlightHub renders this as a glTF
+    model (wp.glb), so no colour could be sampled from the scene graph the way
+    the wedge colours were; this cyan is read off screenshots and is therefore
+    an approximation, not a measurement.
+  */
+  gimbalMarker: '#40C8E0',
 };
+
+/** Fill and outline opacities for the coverage wedges, measured (§1). */
+export const COVERAGE_OPACITY = { fill: 0.34, outline: 0.9 };
 
 /** Default map view when a mission has no waypoints yet — Hyderabad, Telangana. */
 export const DEFAULT_CENTER = [17.385, 78.4867];

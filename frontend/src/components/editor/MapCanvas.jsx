@@ -5,7 +5,7 @@
  * marker to select it. The route is drawn as a casing + line so it stays legible
  * over both street and terrain tiles.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CircleMarker,
   MapContainer,
@@ -30,12 +30,21 @@ import {
   LuX,
 } from 'react-icons/lu';
 import {
+  COVERAGE_OPACITY,
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
   MAP_COLORS,
   TILE_LAYERS,
 } from '../../lib/constants.js';
-import { bearingBetween, offsetLatLng, waypointBounds } from '../../lib/geo.js';
+import {
+  bearingBetween,
+  coverageWedge,
+  headingAt,
+  heightAt,
+  offsetLatLng,
+  waypointBounds,
+} from '../../lib/geo.js';
+import { rangeFor, wideHFov, zoomHFov, zoomRatioAt } from '../../lib/camera.js';
 import Map3DOverlay from './Map3DOverlay.jsx';
 import {
   DEFAULT_EXAGGERATION,
@@ -50,6 +59,15 @@ import {
   cssTransform,
   panFactor,
 } from '../../lib/projection3d.js';
+
+/*
+  The gimbal orientation fan. The reference draws a small 3D model at the
+  waypoint (waypoint-camera-visuals §4); these two numbers size the flat
+  equivalent so it reads as a heading indicator at normal editing zooms rather
+  than as a coverage area — it is deliberately much shorter than a real wedge.
+*/
+const GIMBAL_MARKER_FOV = 55;
+const GIMBAL_MARKER_RANGE_M = 18;
 
 /**
  * A numbered waypoint pin. Built as a divIcon so the index is real text —
@@ -224,6 +242,8 @@ export default function MapCanvas({
   display = {},
   // Route settings, used by the tilted view to resolve waypoint altitudes.
   settings = {},
+  // Aircraft model id, so coverage wedges can use its measured field of view.
+  aircraftModel = null,
   // Index being repositioned, plus its confirm/cancel handlers (§7).
   editingIndex = null,
   onEditWaypoint,
@@ -352,6 +372,12 @@ export default function MapCanvas({
   };
 
   const positions = useMemo(() => waypoints.map((w) => [w.lat, w.lng]), [waypoints]);
+
+  /*
+    Null for every aircraft whose field of view was never measured, which
+    switches the coverage layer off rather than drawing a made-up footprint.
+  */
+  const coverageFov = wideHFov(aircraftModel);
 
   const handleMapClick = (latlng) => {
     // The tilted view is view-only: Leaflet's screen-to-latlng is unreliable
@@ -592,31 +618,95 @@ export default function MapCanvas({
         )}
 
         {/*
-          Gimbal orientation ticks (§3). Drawn from the waypoint's gimbalYaw action
-          where it has one, falling back to the route heading, so the tick shows
-          roughly where the payload is looking.
+          Camera coverage (docs/waypoint-camera-visuals.md §2).
+
+          Two wedges per waypoint, drawn widest-first so the zoom wedge reads as
+          sitting inside the wide one: an amber wide-lens footprint and a green
+          footprint narrowed by that waypoint's zoom ratio. Each is a translucent
+          fill, a near-opaque outline and a dashed centre arrow, matching how the
+          reference composes them.
+
+          Only aircraft with a measured field of view draw anything — see
+          lib/camera.js. The menu explains the absence rather than faking it.
+        */}
+        {flat && display.displayCameraCoverage && coverageFov &&
+          waypoints.map((waypoint, index) => {
+            const heading = headingAt(waypoints, index, settings);
+            const range = rangeFor(heightAt(waypoint, settings));
+            if (!range) return null;
+            const zoomFov = zoomHFov(coverageFov, zoomRatioAt(waypoint, settings));
+            const key = waypoint.id ?? index;
+
+            return [
+              { fov: coverageFov, color: MAP_COLORS.coverageWide, tag: 'wide' },
+              { fov: zoomFov, color: MAP_COLORS.coverageZoom, tag: 'zoom' },
+            ].map(({ fov, color, tag }) => {
+              // A zoom of 1X makes the two wedges identical; drawing both just
+              // doubles the fill and darkens it, so the inner one is skipped.
+              if (tag === 'zoom' && fov >= coverageFov - 0.01) return null;
+              return (
+                <Fragment key={`cov-${tag}-${key}`}>
+                  <Polygon
+                    positions={coverageWedge(waypoint.lat, waypoint.lng, heading, fov, range)}
+                    pathOptions={{
+                      color,
+                      weight: 1.5,
+                      opacity: COVERAGE_OPACITY.outline,
+                      fillColor: color,
+                      fillOpacity: COVERAGE_OPACITY.fill,
+                      interactive: false,
+                    }}
+                  />
+                  <Polyline
+                    positions={[
+                      [waypoint.lat, waypoint.lng],
+                      offsetLatLng(waypoint.lat, waypoint.lng, heading, range),
+                    ]}
+                    pathOptions={{
+                      color,
+                      weight: 1.5,
+                      opacity: 1,
+                      dashArray: '6 6',
+                      interactive: false,
+                    }}
+                  />
+                </Fragment>
+              );
+            });
+          })}
+
+        {/*
+          Gimbal orientation (§4 of waypoint-camera-visuals). The reference places
+          a small 3D fan model at every waypoint, oriented to that waypoint's
+          world heading. Here it is a flat fan drawn on the ground, from the same
+          heading the coverage wedges use.
+
+          This replaces an earlier tick of our own invention that read the
+          gimbalYaw action — a rendering the reference has no equivalent for, and
+          one that was permanently inert on the M4TD, which has no such action.
         */}
         {flat && display.displayGimbalOrientation &&
-          waypoints.map((waypoint, index) => {
-            const gimbal = (waypoint.actions ?? []).find((a) => a.action_type === 'gimbalYaw');
-            const yaw = Number(gimbal?.params?.angle ?? 0);
-            const heading =
-              index < waypoints.length - 1
-                ? bearingBetween(waypoint, waypoints[index + 1])
-                : index > 0
-                  ? bearingBetween(waypoints[index - 1], waypoint)
-                  : 0;
-            return (
-              <Polyline
-                key={`gimbal-${waypoint.id ?? index}`}
-                positions={[
-                  [waypoint.lat, waypoint.lng],
-                  offsetLatLng(waypoint.lat, waypoint.lng, heading + yaw, 45),
-                ]}
-                pathOptions={{ color: MAP_COLORS.markerSelected, weight: 2, opacity: 0.9 }}
-              />
-            );
-          })}
+          waypoints.map((waypoint, index) => (
+            <Polygon
+              key={`gimbal-${waypoint.id ?? index}`}
+              positions={coverageWedge(
+                waypoint.lat,
+                waypoint.lng,
+                headingAt(waypoints, index, settings),
+                GIMBAL_MARKER_FOV,
+                GIMBAL_MARKER_RANGE_M,
+                12
+              )}
+              pathOptions={{
+                color: MAP_COLORS.gimbalMarker,
+                weight: 1.5,
+                opacity: 0.95,
+                fillColor: MAP_COLORS.gimbalMarker,
+                fillOpacity: 0.55,
+                interactive: false,
+              }}
+            />
+          ))}
 
         {/*
           Vertical drop lines (§3). Without an elevation service there is no true

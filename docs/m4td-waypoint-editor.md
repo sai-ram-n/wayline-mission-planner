@@ -253,3 +253,26 @@ WPML identifiers, reporting honestly when the aircraft cannot be determined.
 **Not implemented, and why:** virtual-flight/FPV authoring and `Smart Capture (BETA)` need a 3D
 scene and detection service this build has no access to; the Take Photo refusal in §8.3 has no
 established cause, so no rule was invented for it.
+
+---
+
+## 12. Correction — map camera visuals (added 2026-09-03)
+
+This document was written from a **2D-only** session and did not describe the coloured shapes on the
+map at all. A follow-up session measured them; the results are in
+`docs/waypoint-camera-visuals.md`. Three corrections land here:
+
+1. **`Display Gimbal Orientation` draws a per-waypoint 3D orientation marker** — one glTF model per
+   waypoint (`wp.glb`, and a `wp-follow.glb` variant), rendered as a small cyan/mint fan at the
+   waypoint and oriented to that waypoint's world heading. §4 recorded only the toggle's name.
+2. **`Display Vertical Lines` draws a true vertical drop line** from the waypoint to the ground.
+3. **§11 overstates what this build implements.** The `Display Gimbal Orientation` rendering shipped
+   in `MapCanvas.jsx` — a 45 m tick at route bearing plus the `gimbalYaw` action angle — is **our own
+   design, not observed FlightHub behaviour**, and it is inert on the M4TD, which has no Gimbal Yaw
+   action. It should not be cited as a reproduction of the reference.
+
+The camera preview details in §6 are unaffected and were re-confirmed.
+
+**Implemented 2026-09-03.** The orientation marker and both coverage wedges now exist —
+see `docs/waypoint-camera-visuals.md` §6 for the property-by-property comparison and the five
+places this build knowingly differs from the reference.

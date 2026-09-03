@@ -164,6 +164,10 @@ switches the map into a 3D first-person authoring mode. The settings panel then 
 
 In this mode:
 - A green camera-frustum cone projects from the virtual aircraft
+  > **Corrected 2026-09-03.** This line is wrong. There are **two** cones — an amber one and a
+  > green one — and the amber one is the larger and more prominent. Only the green cone follows
+  > the aircraft and the zoom ratio. Measured colours, angles and behaviour are in
+  > `docs/waypoint-camera-visuals.md`, which supersedes this bullet.
 - A live camera preview panel shows lens tabs **WIDE 1X [1] / Zoom 5X [2] / IR** and a zoom slider
   (2× · 5× · 10× · 20× · 200× ticks)
 - A flight HUD provides Q/W/E and A/S/D pads, an attitude compass, ALT (with paired ASL), distance,
@@ -627,3 +631,11 @@ with them hidden would make the editor unusable.
 
 *Compiled 2026-09-01 from direct exploration of the live Wayline module. Behaviour marked
 "verified" was observed; anything uncertain is flagged inline or listed in §10.*
+
+---
+
+**Addendum 2026-09-03.** `docs/waypoint-camera-visuals.md` records the map's camera
+coverage cones, the per-waypoint orientation marker behind `Display Gimbal Orientation`, and the
+real behaviour of all four display toggles — none of which this document captured. It also notes
+that the §12 row retiring the frustum with virtual-flight authoring still stands: the cones are
+drawn only in that mode.

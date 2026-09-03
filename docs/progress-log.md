@@ -923,3 +923,58 @@ action counts all intact.
 14 backend tests (4 new: every aircraft round-trips; the sidecar never replaces the DJI files; a
 foreign kmz without a sidecar still falls back; a sidecar from another tool is ignored) and 33
 frontend tests green.
+
+---
+
+## Camera coverage and the waypoint orientation marker
+
+**Date:** 2026-09-03 · **Version:** 0.13.0
+
+Implements the three waypoint-level features the user described, after a measurement session on the
+live FlightHub M4TD route established what they actually are. Full record in
+`docs/waypoint-camera-visuals.md`; the short version:
+
+- FlightHub draws **two** coverage wedges, not the one green cone `feature-reference.md:166`
+  recorded. Amber `#FFDB05` is the wide lens; green `#00D690` is the same view narrowed by the zoom
+  ratio. Both are a translucent fill at α 0.34, a near-opaque outline and a dashed centre arrow.
+- The **per-waypoint orientation marker** is `Display Gimbal Orientation`: a glTF fan placed at each
+  waypoint, carrying that waypoint's world heading. It appears to turn as the view rotates because
+  it is a world-space object, not because it tracks the camera.
+- Measured **HFOV 73.19°** for the M4TD wide lens — the first real field-of-view number in this
+  project — and confirmed `HFOV_zoom = 2·atan(tan(wide/2)/ratio)` against live readings.
+
+### Built
+`lib/camera.js` (FOV table, zoom law, range, zoom-ratio resolution), `geo.js` gained `headingAt`
+and `coverageWedge`, `MapCanvas.jsx` draws both layers, and a fifth display toggle
+**Display Camera Coverage** joins the menu.
+
+`headingAt` is now the single answer to "which way does the aircraft face here", resolving an
+Aircraft Yaw action first, then a manual override, then a point of interest, then the route.
+Previously the orientation tick derived its own heading and got it wrong.
+
+### Removed
+The old `Display Gimbal Orientation` tick — a 45 m line at route-bearing plus the `gimbalYaw`
+angle — was **our own invention**, had no equivalent in the reference, and was permanently inert on
+the M4TD, which has no Gimbal Yaw action.
+
+### Knowingly different from the reference
+Projected from each waypoint rather than a flying virtual aircraft (this build has no virtual
+flight); the orientation fan is flat and its cyan is read off screenshots rather than sampled;
+wedge range encodes a single observation as a 2× altitude ratio; and only the M4TD draws coverage
+at all — every other aircraft shows the toggle disabled with the reason rather than getting an
+invented field of view.
+
+### Fixed in passing
+The display settings menu was `z-50` while Leaflet's panes sit at z-400 and up, and the Leaflet
+container creates no stacking context — so the menu had been painting **underneath the map** since
+it was added, unreadable and unclickable. Now `z-[1000]`.
+
+### Verified
+In the browser on a real M4TD route: five amber wedges at fill-opacity 0.34 with dashed centre
+lines, five cyan orientation fans, and no green wedge while every waypoint sat at 1X. Setting one
+waypoint's Camera Zoom to 7X produced exactly one green wedge at `#00D690`, fill-opacity 0.34, with
+its own dashed centre line. 47 frontend tests (14 new) and 14 backend tests green.
+
+### Still open
+What the amber wedge is anchored to in the reference, and which heading mode selects the
+`wp-follow` model over `wp`. Both are listed in `waypoint-camera-visuals.md` §7 rather than guessed.

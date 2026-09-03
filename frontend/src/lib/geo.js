@@ -233,3 +233,63 @@ export function routeToSvgPath(path, width = 160, height = 90, padding = 8) {
     })
     .join(' ');
 }
+
+/**
+ * Which way the aircraft faces at a waypoint, as a 0–360° compass bearing.
+ *
+ * This resolves the heading the same way the route does, in priority order:
+ * an explicit Aircraft Yaw action wins, then a per-waypoint manual angle, then a
+ * point of interest, and otherwise the aircraft follows the route (§5's
+ * `followWayline`, the default). The last waypoint has no next leg, so it keeps
+ * the bearing it arrived on.
+ *
+ * Used by the gimbal-orientation marker and the camera coverage wedges, which
+ * both need the same answer — previously the orientation tick derived its own,
+ * and got it wrong (docs/waypoint-camera-visuals.md §6).
+ */
+export function headingAt(waypoints, index, settings) {
+  const waypoint = waypoints?.[index];
+  if (!waypoint) return 0;
+
+  const yawAction = (waypoint.actions ?? []).find((a) => a.action_type === 'rotateYaw');
+  const fromAction = Number(yawAction?.params?.aircraftHeading);
+  if (Number.isFinite(fromAction)) return (fromAction + 360) % 360;
+
+  const mode =
+    waypoint.use_global_heading === false
+      ? waypoint.heading_mode
+      : (settings?.headingMode ?? 'followWayline');
+
+  if (mode === 'manually' || mode === 'fixed') {
+    return (Number(waypoint.heading_angle ?? 0) + 360) % 360;
+  }
+
+  if (mode === 'towardPOI' && (waypoint.poi_lat || waypoint.poi_lng)) {
+    return bearingBetween(waypoint, { lat: waypoint.poi_lat, lng: waypoint.poi_lng });
+  }
+
+  // followWayline: face the next waypoint, or hold the arrival bearing at the end.
+  const next = waypoints[index + 1];
+  if (next) return bearingBetween(waypoint, next);
+  const previous = waypoints[index - 1];
+  return previous ? bearingBetween(previous, waypoint) : 0;
+}
+
+/**
+ * A camera footprint as a closed ring of `[lat, lng]` pairs: apex at the
+ * waypoint, an arc `rangeMetres` away spanning `fovDegrees`, and back.
+ *
+ * The arc is sampled rather than drawn as a straight chord so a wide field of
+ * view keeps its curvature instead of cutting the corners off the footprint.
+ */
+export function coverageWedge(lat, lng, headingDegrees, fovDegrees, rangeMetres, segments = 24) {
+  if (!(rangeMetres > 0) || !(fovDegrees > 0)) return [];
+  const half = fovDegrees / 2;
+  const ring = [[lat, lng]];
+  for (let i = 0; i <= segments; i += 1) {
+    const bearingDeg = headingDegrees - half + (fovDegrees * i) / segments;
+    ring.push(offsetLatLng(lat, lng, bearingDeg, rangeMetres));
+  }
+  ring.push([lat, lng]);
+  return ring;
+}

@@ -35,6 +35,7 @@ import useMissionStore from '../store.js';
 import { computeStats } from '../lib/geo.js';
 import { generateRoute, lineLength, polygonArea } from '../lib/routegen.js';
 import { lensesFor } from '../lib/actions.js';
+import { hasCoverage } from '../lib/camera.js';
 import { ROUTE_TYPE_LABELS } from '../lib/constants.js';
 
 export default function Editor() {
@@ -459,6 +460,7 @@ export default function Editor() {
             minAltitudeAlert={mission.settings?.minAltitudeAlertAGL}
             onMinAltitudeAlertChange={(v) => setSettings({ minAltitudeAlertAGL: v })}
             disabled={mission.locked}
+            coverageAvailable={hasCoverage(mission.aircraft_model)}
           />
         </div>
 
@@ -612,6 +614,7 @@ export default function Editor() {
           onMoveGeometryVertex={handleMoveGeometryVertex}
           display={display}
           settings={mission.settings}
+          aircraftModel={mission.aircraft_model}
           editingIndex={editingIndex}
           onEditWaypoint={beginEditWaypoint}
           onConfirmEdit={confirmEditWaypoint}
