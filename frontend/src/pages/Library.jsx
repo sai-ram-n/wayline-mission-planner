@@ -455,6 +455,7 @@ export default function Library() {
             waypoints={detail?.waypoints ?? []}
             takeoffPoint={detail?.settings?.takeOffRefPoint ?? null}
             geometry={detail?.geometry ?? null}
+            settings={detail?.settings ?? {}}
             fitTrigger={detail?.id ?? 'empty'}
             readOnly
           />

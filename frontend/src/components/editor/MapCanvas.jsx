@@ -18,7 +18,7 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
-import { LuCrosshair, LuLayers, LuMaximize, LuUndo2 } from 'react-icons/lu';
+import { LuCrosshair, LuLayers, LuMaximize, LuBox, LuUndo2 } from 'react-icons/lu';
 import {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -26,6 +26,20 @@ import {
   TILE_LAYERS,
 } from '../../lib/constants.js';
 import { bearingBetween, offsetLatLng, waypointBounds } from '../../lib/geo.js';
+import Map3DOverlay from './Map3DOverlay.jsx';
+import {
+  DEFAULT_EXAGGERATION,
+  DEFAULT_PERSPECTIVE,
+  DEFAULT_PITCH,
+  MAX_EXAGGERATION,
+  MAX_PITCH,
+  MIN_EXAGGERATION,
+  autoExaggeration,
+  perspectiveFor,
+  clampPitch,
+  cssTransform,
+  panFactor,
+} from '../../lib/projection3d.js';
 
 /**
  * A numbered waypoint pin. Built as a divIcon so the index is real text —
@@ -52,6 +66,13 @@ function waypointIcon(index, { selected, isStart, isEnd }) {
     iconAnchor: [13, 13],
   });
 }
+
+/**
+ * How far the map plane extends past the viewport in 3D. Tilting a viewport-sized
+ * plane leaves it visibly ending in mid-air, so it is drawn larger and centred.
+ * The overlay uses the same value to stay aligned with the tiles.
+ */
+const PLANE_INSET = '-45% -25%';
 
 /** The reference takeoff point marker. */
 const takeoffIcon = L.divIcon({
@@ -140,14 +161,135 @@ export default function MapCanvas({
   readOnly = false,
   // Flight route display settings (§3). All default off.
   display = {},
+  // Route settings, used by the tilted view to resolve waypoint altitudes.
+  settings = {},
 }) {
   const [basemap, setBasemap] = useState('street');
   const mapRef = useRef(null);
 
+  /* --------------------------------------------------------- tilted view */
+
+  // View state only: never written to the mission, so switching cannot dirty it.
+  const [is3D, setIs3D] = useState(false);
+  const [pitch, setPitch] = useState(0);
+  const [exaggeration, setExaggeration] = useState(DEFAULT_EXAGGERATION);
+  // Auto until the user moves the slider, because the useful factor depends on
+  // zoom and altitude — see autoExaggeration in lib/projection3d.js.
+  const [autoScale, setAutoScale] = useState(true);
+  const [mapReady, setMapReady] = useState(false);
+  const [planeHeight, setPlaneHeight] = useState(0);
+  const wrapperRef = useRef(null);
+  const containerRef = useRef(null);
+  const dragState = useRef(null);
+
+  /** Highest waypoint on the route, used to fit the vertical scale. */
+  const maxAltitude = useMemo(
+    () =>
+      waypoints.reduce(
+        (highest, w) =>
+          Math.max(
+            highest,
+            w.use_global_height === false && w.height != null
+              ? w.height
+              : (w.height ?? settings.globalHeight ?? 100)
+          ),
+        0
+      ),
+    [waypoints, settings.globalHeight]
+  );
+
+  const effectiveExaggeration = useMemo(() => {
+    if (!autoScale) return exaggeration;
+    const map = mapRef.current;
+    if (!map) return DEFAULT_EXAGGERATION;
+    // Measured against the visible viewport, not the oversized plane: the plane
+    // extends well past the top of the screen, so fitting to it would still let
+    // tall waypoints climb out of view.
+    const visibleHeight = containerRef.current?.clientHeight ?? map.getSize().y;
+    return autoExaggeration(maxAltitude, map.getCenter().lat, map.getZoom(), visibleHeight);
+    // Recomputed on pitch changes too, which is when the view is being adjusted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoScale, exaggeration, maxAltitude, mapReady, is3D, pitch]);
+
+  const enter3D = () => {
+    setIs3D(true);
+    setPitch(DEFAULT_PITCH);
+    // Leaflet must re-measure: the container grows in 3D so the tilted plane
+    // still covers the frame instead of ending in mid-air.
+    setTimeout(() => {
+      mapRef.current?.invalidateSize({ animate: false });
+      setPlaneHeight(wrapperRef.current?.getBoundingClientRect().height ?? 0);
+    }, 60);
+  };
+  const exit3D = () => {
+    setIs3D(false);
+    setPitch(0);
+    setTimeout(() => mapRef.current?.invalidateSize({ animate: false }), 60);
+  };
+
+  /*
+   * Leaflet derives lat/lng from the container's bounding rect, which a CSS 3D
+   * transform invalidates — its own drag and wheel handlers would scroll the map
+   * to the wrong place. They are turned off while tilted and replaced below.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const handlers = ['dragging', 'scrollWheelZoom', 'doubleClickZoom', 'boxZoom'];
+    handlers.forEach((name) => {
+      if (!map[name]) return;
+      if (is3D) map[name].disable();
+      else map[name].enable();
+    });
+  }, [is3D, mapReady]);
+
+  /** Ctrl + drag tilts; a plain drag pans; the wheel zooms. */
+  const handle3DPointerDown = (event) => {
+    if (!is3D || event.button !== 0) return;
+    dragState.current = {
+      mode: event.ctrlKey || event.metaKey ? 'tilt' : 'pan',
+      x: event.clientX,
+      y: event.clientY,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handle3DPointerMove = (event) => {
+    const drag = dragState.current;
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+
+    if (drag.mode === 'tilt') {
+      // Dragging up tilts further over; a quarter degree per pixel feels right.
+      setPitch((current) => clampPitch(current - dy * 0.25));
+    } else {
+      // Ground moves less per pixel near the horizon, so compensate vertically.
+      mapRef.current?.panBy([-dx, -dy * panFactor(pitch)], { animate: false });
+    }
+  };
+
+  const handle3DPointerUp = (event) => {
+    dragState.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
+  const handle3DWheel = (event) => {
+    if (!is3D) return;
+    const map = mapRef.current;
+    if (!map) return;
+    event.preventDefault();
+    map.setZoom(map.getZoom() + (event.deltaY < 0 ? 1 : -1));
+  };
+
   const positions = useMemo(() => waypoints.map((w) => [w.lat, w.lng]), [waypoints]);
 
   const handleMapClick = (latlng) => {
-    if (readOnly) return;
+    // The tilted view is view-only: Leaflet's screen-to-latlng is unreliable
+    // under a CSS 3D transform, so a click would land in the wrong place.
+    if (readOnly || is3D) return;
     // A placement mode (e.g. "set takeoff point") consumes the next click.
     if (placementMode) {
       onPlacePoint?.(latlng, placementMode);
@@ -183,8 +325,43 @@ export default function MapCanvas({
   const committed = useMemo(() => geometry?.vertices ?? [], [geometry]);
   const isAreaShape = geometry?.kind === 'area';
 
+  const flat = !is3D;
+  // One value drives both the CSS on the tiles and the overlay's maths.
+  const perspective = perspectiveFor(planeHeight);
+
   return (
-    <div className="relative h-full w-full">
+    <div ref={containerRef} className="relative h-full w-full overflow-hidden">
+      {/*
+        Past the far edge of the tilted plane there is nothing to draw. A sky
+        gradient makes that deliberate rather than looking like the map failed
+        to load.
+      */}
+      {is3D && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-0"
+          style={{
+            background:
+              'linear-gradient(to bottom, #0b0f14 0%, #16222f 45%, #24384c 70%, #24384c 100%)',
+          }}
+        />
+      )}
+      {/*
+        In 3D the map plane is drawn larger than the viewport and centred, so
+        that once tilted it still reaches past every edge. Without this the
+        plane visibly ends part-way up the screen with panel behind it.
+      */}
+      <div
+        ref={wrapperRef}
+        className="absolute"
+        style={{
+          inset: is3D ? PLANE_INSET : 0,
+          transform: cssTransform(pitch, perspective),
+          transformOrigin: '50% 50%',
+          transition: dragState.current ? 'none' : 'transform 250ms ease-out',
+          willChange: is3D ? 'transform' : 'auto',
+        }}
+      >
       <MapContainer
         center={DEFAULT_CENTER}
         zoom={DEFAULT_ZOOM}
@@ -194,7 +371,12 @@ export default function MapCanvas({
       >
         <TileLayer url={tiles.url} attribution={tiles.attribution} maxZoom={tiles.maxZoom} />
 
-        <MapRefBridge onReady={(m) => { mapRef.current = m; }} />
+        <MapRefBridge
+          onReady={(m) => {
+            mapRef.current = m;
+            setMapReady(true);
+          }}
+        />
         <ClickHandler
           onMapClick={handleMapClick}
           onMapDoubleClick={() => onFinishDrawing?.()}
@@ -203,7 +385,7 @@ export default function MapCanvas({
         <FitOnLoad waypoints={waypoints} trigger={fitTrigger} />
 
         {/* The surveyed area or corridor centre line, once committed. */}
-        {committed.length > 1 &&
+        {flat && committed.length > 1 &&
           (isAreaShape ? (
             <Polygon
               positions={committed}
@@ -217,7 +399,7 @@ export default function MapCanvas({
           ))}
 
         {/* Draggable handles on the committed shape's vertices. */}
-        {!drawMode && !readOnly &&
+        {flat && !drawMode && !readOnly &&
           committed.map((position, index) => (
             <CircleMarker
               key={`geom-${index}`}
@@ -245,7 +427,7 @@ export default function MapCanvas({
           ))}
 
         {/* The generated boustrophedon preview. */}
-        {generatedLines.map((line, index) => (
+        {flat && generatedLines.map((line, index) => (
           <Polyline
             key={`gen-${index}`}
             positions={line}
@@ -276,7 +458,7 @@ export default function MapCanvas({
           </>
         )}
 
-        {positions.length > 1 && (
+        {flat && positions.length > 1 && (
           <>
             {/* Casing beneath the route keeps it readable over pale tiles. */}
             <Polyline
@@ -298,7 +480,7 @@ export default function MapCanvas({
           </>
         )}
 
-        {takeoffPoint && (
+        {flat && takeoffPoint && (
           <Marker position={[takeoffPoint.lat, takeoffPoint.lng]} icon={takeoffIcon}>
             <Popup>
               <span className="text-xs">Reference takeoff point</span>
@@ -311,7 +493,7 @@ export default function MapCanvas({
           where it has one, falling back to the route heading, so the tick shows
           roughly where the payload is looking.
         */}
-        {display.displayGimbalOrientation &&
+        {flat && display.displayGimbalOrientation &&
           waypoints.map((waypoint, index) => {
             const gimbal = (waypoint.actions ?? []).find((a) => a.action_type === 'gimbalYaw');
             const yaw = Number(gimbal?.params?.angle ?? 0);
@@ -338,7 +520,7 @@ export default function MapCanvas({
           ground point, so these are a fixed-length stub southward from each
           waypoint — an altitude cue, not a survey-accurate projection.
         */}
-        {display.displayVerticalLines &&
+        {flat && display.displayVerticalLines &&
           waypoints.map((waypoint, index) => (
             <Polyline
               key={`vert-${waypoint.id ?? index}`}
@@ -355,7 +537,7 @@ export default function MapCanvas({
             />
           ))}
 
-        {display.displayWaypoints === false ? null : waypoints.map((waypoint, index) => (
+        {!flat || display.displayWaypoints === false ? null : waypoints.map((waypoint, index) => (
           <Marker
             key={waypoint.id ?? index}
             position={[waypoint.lat, waypoint.lng]}
@@ -382,9 +564,60 @@ export default function MapCanvas({
 
         {children}
       </MapContainer>
+      </div>
+
+      {is3D && (
+        <>
+          <Map3DOverlay
+            map={mapRef.current}
+            waypoints={waypoints}
+            settings={settings}
+            geometry={geometry}
+            takeoffPoint={takeoffPoint}
+            selectedIndex={selectedIndex}
+            pitch={pitch}
+            exaggeration={effectiveExaggeration}
+            perspective={perspective}
+            inset={PLANE_INSET}
+          />
+
+          {/* Interaction surface: our own pan, tilt and zoom while Leaflet's are off. */}
+          <div
+            className="absolute inset-0 z-[440] cursor-grab active:cursor-grabbing"
+            onPointerDown={handle3DPointerDown}
+            onPointerMove={handle3DPointerMove}
+            onPointerUp={handle3DPointerUp}
+            onPointerCancel={handle3DPointerUp}
+            onWheel={handle3DWheel}
+          />
+        </>
+      )}
 
       {/* Map controls, kept outside the Leaflet container so they inherit app styling. */}
-      <div className="pointer-events-none absolute right-3 top-3 z-[400] flex flex-col gap-2">
+      <div className="pointer-events-none absolute right-3 top-3 z-[460] flex flex-col gap-2">
+        {/* View mode. 3D tilts the ground plane so altitude becomes visible. */}
+        <div className="pointer-events-auto flex overflow-hidden rounded-md border border-panel-700 bg-panel-900/95 p-0.5 shadow-lg">
+          {[
+            { mode: '2D', active: !is3D, onClick: exit3D, hint: 'Flat map view' },
+            { mode: '3D', active: is3D, onClick: enter3D, hint: 'Tilted view — Ctrl + drag to tilt' },
+          ].map((option) => (
+            <button
+              key={option.mode}
+              type="button"
+              onClick={option.onClick}
+              title={option.hint}
+              aria-pressed={option.active}
+              className={`rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                option.active
+                  ? 'bg-accent text-white'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {option.mode}
+            </button>
+          ))}
+        </div>
+
         <div className="pointer-events-auto flex flex-col overflow-hidden rounded-md border border-panel-700 bg-panel-900/95 shadow-lg">
           <button
             type="button"
@@ -426,6 +659,77 @@ export default function MapCanvas({
           <LuLayers className="h-4 w-4" />
         </button>
       </div>
+
+      {is3D && (
+        <div className="pointer-events-none absolute bottom-6 left-3 z-[460] flex flex-col gap-2">
+          <div className="pointer-events-auto w-56 rounded-md border border-panel-700 bg-panel-900/95 p-2.5 shadow-lg">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-300">
+                <LuBox className="h-3.5 w-3.5 text-accent" />
+                Tilt
+              </span>
+              <span className="font-mono text-[11px] text-slate-400">{Math.round(pitch)}°</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={MAX_PITCH}
+              value={pitch}
+              onChange={(event) => setPitch(clampPitch(Number(event.target.value)))}
+              aria-label="Tilt"
+              className="w-full"
+            />
+
+            <div className="mb-1.5 mt-2.5 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-medium text-slate-300">Altitude scale</span>
+              <button
+                type="button"
+                onClick={() => setAutoScale(true)}
+                disabled={autoScale}
+                title="Fit the vertical scale to the view"
+                className="font-mono text-[11px] text-slate-400 enabled:hover:text-accent disabled:text-accent"
+              >
+                {effectiveExaggeration}× {autoScale ? 'auto' : ''}
+              </button>
+            </div>
+            <input
+              type="range"
+              min={MIN_EXAGGERATION}
+              max={MAX_EXAGGERATION}
+              step={1}
+              value={effectiveExaggeration}
+              onChange={(event) => {
+                setAutoScale(false);
+                setExaggeration(Number(event.target.value));
+              }}
+              aria-label="Altitude scale"
+              className="w-full"
+            />
+
+            <p className="mt-2 text-[10px] leading-snug text-slate-500">
+              {effectiveExaggeration > 1 ? (
+                <>
+                  Heights are exaggerated {effectiveExaggeration}× so the gap is readable — this is
+                  not real clearance.
+                </>
+              ) : (
+                'Heights shown at true scale.'
+              )}
+            </p>
+            <p className="mt-1 text-[10px] leading-snug text-slate-500">
+              Ctrl + drag to tilt · drag to pan · scroll to zoom
+            </p>
+          </div>
+        </div>
+      )}
+
+      {is3D && !readOnly && (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-[460] flex justify-center">
+          <div className="rounded-full border border-panel-600 bg-panel-900/95 px-4 py-1.5 text-xs text-slate-300 shadow-lg">
+            3D is view only — switch to 2D to edit
+          </div>
+        </div>
+      )}
 
       {drawMode && (
         <div className="absolute inset-x-0 top-3 z-[400] flex justify-center">

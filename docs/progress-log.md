@@ -712,3 +712,58 @@ Both suites green (18 frontend, 10 backend), build clean, console clean. Toggle 
 inside their track in both states with a 10px gap to the label; markers restored; coordinates
 display 7 decimals; library map renders with the floating hint and switches correctly between
 routes.
+
+---
+
+## 2D / 3D map view
+
+**Date:** 2026-09-02 · **Version:** 0.11.0
+
+Requested so the vertical gap between a route and the ground is visible — a 100 m waypoint and a
+20 m one looked identical on a flat map.
+
+### Scope, as agreed with the user
+Keep Leaflet, **no second render engine**, no terrain. 3D is a tilted view of the flat map plane
+with waypoints lifted along Z, tilted with `Ctrl` + drag, and **view only**.
+
+### How it works
+- `lib/projection3d.js` — pure maths. The map container gets a CSS
+  `perspective(...) rotateX(...)`; the overlay reimplements that same transform so it can place
+  points *above* the plane, which CSS alone cannot do for us. `cssTransform` emits the CSS from the
+  same numbers, so the tiles and the overlay cannot drift apart.
+- `components/editor/Map3DOverlay.jsx` — SVG scene: ground shadow, vertical column, marker at
+  altitude, flight path joining the tops and a dashed ground track. Sorted by depth so near columns
+  overlap far ones.
+- `MapCanvas.jsx` — mode toggle, `Ctrl`+drag tilt, and our own pan/zoom.
+
+### Three things that had to be solved, none of them obvious up front
+1. **Leaflet's own handlers must be disabled while tilted.** Leaflet derives lat/lng from
+   `getBoundingClientRect`, which a CSS 3D transform invalidates, so its drag and wheel would
+   scroll to the wrong place. Pan and zoom are re-implemented against `panBy` / `setZoom`.
+2. **A fixed multiplier for altitude cannot work.** At zoom 14 a 100 m waypoint is 11 px; at zoom
+   17 a 400 m one is already 1000 px and 3× throws it off screen. `autoExaggeration` fits the
+   tallest column to a quarter of the *visible* viewport, and the factor is always displayed so an
+   exaggerated gap is never read as real clearance.
+3. **The plane must be drawn larger than the viewport**, or tilting leaves it ending in mid-air
+   with panel behind it. That in turn forced the camera distance to scale with the plane
+   (`perspectiveFor`) — a fixed 1400 px on an oversized plane is an extreme wide-angle lens that
+   threw the whole route off screen. A sky gradient fills the area past the far edge.
+
+### Bug found
+The overlay subscribed to Leaflet's `move`/`zoom` events and bumped a counter to redraw, but the
+counter was not in the `useMemo` dependency array — so the scene was served from cache and stayed
+frozen while the map moved underneath it. Both panning and zooming appeared completely dead until
+this was traced.
+
+### Verified
+- 33 frontend tests (15 new for the projection), 10 backend, production build clean.
+- In the browser: the toggle switches modes; the tilted plane fills the frame with a horizon; five
+  waypoints at 100/400/100/200/100 m render columns of 48/153/48/100/48 px — ratios matching the
+  altitudes; `Ctrl` + drag tilts and clamps at 0° and 70° without inverting; auto scale picks a
+  sensible factor per zoom; switching modes does **not** mark the mission dirty.
+
+### Not yet verified
+Chrome disconnected immediately after the redraw fix, so **pan and zoom while tilted have not been
+re-checked in the browser**. The diagnosis is solid — both pan and zoom froze together, which points
+at the shared memo rather than either handler — but the fix itself is unconfirmed and should be
+exercised before this is considered done.

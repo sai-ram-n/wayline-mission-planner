@@ -570,6 +570,10 @@ override toggles), §11.3, §11.4, §11.5 (bar the two items below), §11.6, §1
 | Real-time terrain following (§8.1, §8.2) | No elevation service. The control is shown disabled with an explanation rather than faked. |
 | The fifth *Waypoint Type* label as a separate entry | Two UI labels share one WPML enum (§7). Both wordings are kept in a single combined label rather than presenting a choice that cannot be serialised. |
 
+**Added since:** the **2D / 3D toggle** (§2 map chrome) now exists, as a tilted view of the flat
+map rather than a 3D globe — see `docs/progress-log.md` for the design and its limits. Terrain is
+still absent, so the ground plane is flat.
+
 **Deviation:** *Display Waypoints* defaults **on**, unlike the reference where all four display
 toggles default off. Waypoint markers are how a waypoint is selected and dragged here, so starting
 with them hidden would make the editor unusable.

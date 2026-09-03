@@ -108,6 +108,9 @@ These are deliberate and documented rather than undiscovered.
 - **The fleet and assignment model is our own design.** The source application's fleet and task
   modules were never explored, so this follows the project brief's simpler specification rather
   than guessing at them.
+- **3D is a tilted flat plane, not terrain.** The 2D/3D toggle tilts the map so waypoint altitude
+  becomes visible, and heights are exaggerated by a displayed factor to stay readable. There is no
+  elevation data, so the ground is flat and the view is read-only — editing stays in 2D.
 - **Terrain following is nominal.** `AGL` is stored and exported, but there is no elevation service,
   so altitudes are not resolved against real terrain.
 

@@ -546,6 +546,7 @@ export default function Editor() {
           onCancelDrawing={handleCancelDrawing}
           onMoveGeometryVertex={handleMoveGeometryVertex}
           display={display}
+          settings={mission.settings}
         />
 
         {mission.locked && (
