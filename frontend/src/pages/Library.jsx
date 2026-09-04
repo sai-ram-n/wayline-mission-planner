@@ -9,11 +9,13 @@ import { useNavigate } from 'react-router-dom';
 import {
   LuArrowDownWideNarrow,
   LuArrowUpWideNarrow,
+  LuDownload,
   LuMapPin,
   LuPlus,
   LuSearch,
   LuSpline,
   LuSquareDashed,
+  LuTrash2,
   LuUpload,
   LuX,
 } from 'react-icons/lu';
@@ -60,6 +62,10 @@ export default function Library() {
   const [importing, setImporting] = useState(false);
   const fileInput = useRef(null);
 
+  // Bulk-select for the toolbar's Download/Delete actions — separate from
+  // `selectedId`, which drives the single-route preview pane.
+  const [checkedIds, setCheckedIds] = useState(() => new Set());
+
   /* --------------------------------------------------------------- loading */
 
   const refresh = useCallback(async () => {
@@ -78,6 +84,16 @@ export default function Library() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Drop bulk-selected ids that no longer exist (deleted elsewhere, e.g. via
+  // the per-card menu), so a stale checkbox can never target a gone route.
+  useEffect(() => {
+    setCheckedIds((current) => {
+      const live = new Set(waylines.map((w) => w.id));
+      const next = new Set([...current].filter((id) => live.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [waylines]);
 
   // Load the full route only when one is selected — the list carries just a path.
   useEffect(() => {
@@ -207,6 +223,42 @@ export default function Library() {
     link.click();
     link.remove();
   };
+
+  /* ------------------------------------------------------------ bulk actions */
+
+  const toggleChecked = (id) =>
+    setCheckedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const clearChecked = () => setCheckedIds(new Set());
+
+  // Locked routes can't be deleted (the per-card menu already disables Delete
+  // for them; the backend also rejects it with a 409), so bulk delete only
+  // targets the unlocked subset of the current selection.
+  const checkedWaylines = waylines.filter((w) => checkedIds.has(w.id));
+  const deletableChecked = checkedWaylines.filter((w) => !w.locked);
+
+  const handleBulkDownload = () => {
+    checkedWaylines.forEach(handleDownload);
+  };
+
+  const handleBulkDelete = () =>
+    run(async () => {
+      if (!deletableChecked.length) return;
+      // eslint-disable-next-line no-alert
+      const ok = window.confirm(
+        `Delete ${deletableChecked.length} route${deletableChecked.length === 1 ? '' : 's'}? ` +
+          'This cannot be undone.'
+      );
+      if (!ok) return;
+      await Promise.all(deletableChecked.map((w) => api.waylines.remove(w.id)));
+      if (deletableChecked.some((w) => w.id === selectedId)) setSelectedId(null);
+      clearChecked();
+    });
 
   const handleImportFile = async (file) => {
     if (!file) return;
@@ -390,6 +442,45 @@ export default function Library() {
           </div>
         </div>
 
+        {checkedIds.size > 0 && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-panel-700 bg-panel-800/60 px-2 py-1.5">
+            <span className="min-w-0 flex-1 truncate text-[11px] text-slate-300">
+              {checkedIds.size} selected
+            </span>
+            <button
+              type="button"
+              onClick={handleBulkDownload}
+              title="Download the selected routes as .kmz"
+              className="btn-secondary px-2 py-1 text-[11px]"
+            >
+              <LuDownload className="h-3.5 w-3.5" />
+              Download
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              disabled={!deletableChecked.length}
+              title={
+                deletableChecked.length
+                  ? 'Delete the selected, unlocked routes'
+                  : 'The selected routes are all locked'
+              }
+              className="btn-secondary px-2 py-1 text-[11px] text-red-400 enabled:hover:bg-red-950/50 disabled:opacity-40"
+            >
+              <LuTrash2 className="h-3.5 w-3.5" />
+              Delete
+            </button>
+            <button
+              type="button"
+              onClick={clearChecked}
+              title="Clear selection"
+              className="btn-ghost p-1"
+            >
+              <LuX className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="shrink-0 p-2">
             <ErrorBanner message={error} onDismiss={() => setError(null)} />
@@ -417,6 +508,8 @@ export default function Library() {
                   onMove={() => setMoveTarget(wayline)}
                   onDuplicate={() => handleDuplicate(wayline)}
                   onToggleLock={() => handleToggleLock(wayline)}
+                  checked={checkedIds.has(wayline.id)}
+                  onToggleCheck={toggleChecked}
                   onDelete={() => handleDelete(wayline)}
                   onDownload={() => handleDownload(wayline)}
                 />
