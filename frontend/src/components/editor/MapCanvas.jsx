@@ -34,6 +34,7 @@ import {
   LuPencil,
   LuRuler,
   LuSearch,
+  LuShieldAlert,
   LuSquare,
   LuTrash2,
   LuUndo2,
@@ -486,7 +487,7 @@ export default function MapCanvas({
       submitAnnotation('point', { lat: latlng.lat, lng: latlng.lng });
       return;
     }
-    if (annotateMode === 'line') {
+    if (annotateMode === 'line' || annotateMode === 'zone') {
       setAnnotateDraft((current) => [...current, latlng]);
       return;
     }
@@ -519,6 +520,20 @@ export default function MapCanvas({
   };
 
   const finishAnnotationLine = () => {
+    if (annotateMode === 'zone') {
+      if (annotateDraft.length >= 3) {
+        // eslint-disable-next-line no-alert
+        const name = window.prompt('Name this GEO Zone (Cancel to discard):');
+        if (name?.trim()) {
+          submitGeoZone(
+            name.trim(),
+            annotateDraft.map((p) => ({ lat: p.lat, lng: p.lng }))
+          );
+        }
+      }
+      setAnnotateDraft([]);
+      return;
+    }
     if (annotateDraft.length >= 2) {
       submitAnnotation(
         'line',
@@ -532,6 +547,43 @@ export default function MapCanvas({
     api.annotations
       .remove(id)
       .then(() => setAnnotations((current) => current.filter((a) => a.id !== id)))
+      .catch(() => {});
+  };
+
+  /*
+    GEO Zone / Task Area overlays (feature-gap audit §"GEO Zone / Task Area map
+    overlays"). DJI's own zones are org-provisioned data with no equivalent
+    source in this single-tenant app, so these are user-authored placeholder
+    polygons — see repository.js's createGeoZone. Scoped down to a single
+    author-able kind ('geo_zone'); 'task_area' is still rendered correctly if
+    present in the data, just not offered as a creation option in this pass.
+  */
+  const [geoZones, setGeoZones] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.geoZones
+      .list()
+      .then((list) => {
+        if (!cancelled) setGeoZones(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const submitGeoZone = (name, vertices) => {
+    api.geoZones
+      .create({ name, kind: 'geo_zone', vertices })
+      .then((created) => setGeoZones((current) => [...current, created]))
+      .catch(() => {});
+  };
+
+  const deleteGeoZone = (id) => {
+    api.geoZones
+      .remove(id)
+      .then(() => setGeoZones((current) => current.filter((z) => z.id !== id)))
       .catch(() => {});
   };
 
@@ -813,10 +865,13 @@ export default function MapCanvas({
         <ClickHandler
           onMapClick={handleMapClick}
           onMapDoubleClick={() => {
-            if (annotateMode === 'line') finishAnnotationLine();
+            if (annotateMode === 'line' || annotateMode === 'zone') finishAnnotationLine();
             else onFinishDrawing?.();
           }}
-          drawing={!!drawMode || (annotateMode === 'line' && annotateDraft.length > 0)}
+          drawing={
+            !!drawMode ||
+            ((annotateMode === 'line' || annotateMode === 'zone') && annotateDraft.length > 0)
+          }
         />
         <FitOnLoad waypoints={waypoints} trigger={fitTrigger} />
 
@@ -1000,11 +1055,42 @@ export default function MapCanvas({
           );
         })}
 
+        {/* Read-only GEO Zone / Task Area overlays, DJI's yellow/green scheme. */}
+        {flat && geoZones.map((zone) => {
+          const color = zone.kind === 'task_area' ? MAP_COLORS.taskArea : MAP_COLORS.geoZone;
+          return (
+            <Polygon
+              key={zone.id}
+              positions={zone.vertices.map((p) => [p.lat, p.lng])}
+              pathOptions={{ color, weight: 1.5, fillColor: color, fillOpacity: 0.18 }}
+            >
+              <Popup>
+                <span className="text-xs">
+                  {zone.name} ({zone.kind === 'task_area' ? 'Task Area' : 'GEO Zone'})
+                </span>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => deleteGeoZone(zone.id)}
+                    className="mt-1 block text-xs text-red-600 underline"
+                  >
+                    Delete
+                  </button>
+                )}
+              </Popup>
+            </Polygon>
+          );
+        })}
+
         {/* The annotation currently being placed (line/rectangle/circle mid-click). */}
-        {flat && annotateDraft.length > 0 && annotateMode === 'line' && (
+        {flat && annotateDraft.length > 0 && (annotateMode === 'line' || annotateMode === 'zone') && (
           <Polyline
             positions={annotateDraft}
-            pathOptions={{ color: MAP_COLORS.route, weight: 2, dashArray: '4 4' }}
+            pathOptions={{
+              color: annotateMode === 'zone' ? MAP_COLORS.geoZone : MAP_COLORS.route,
+              weight: 2,
+              dashArray: '4 4',
+            }}
           />
         )}
         {flat && annotateDraft.length === 1 && (annotateMode === 'rectangle' || annotateMode === 'circle') && (
@@ -1295,6 +1381,7 @@ export default function MapCanvas({
               { mode: 'line', Icon: LuRuler, hint: 'Draw a line annotation (double-click to finish)' },
               { mode: 'rectangle', Icon: LuSquare, hint: 'Draw a rectangle annotation (click two corners)' },
               { mode: 'circle', Icon: LuCircle, hint: 'Draw a circle annotation (click centre, then edge)' },
+              { mode: 'zone', Icon: LuShieldAlert, hint: 'Draw a GEO Zone (double-click to close, then name it)' },
             ].map(({ mode, Icon, hint }, index) => (
               <button
                 key={mode}
@@ -1455,12 +1542,13 @@ export default function MapCanvas({
                   line: 'Click to add vertices',
                   rectangle: 'Click two opposite corners',
                   circle: 'Click the centre, then the edge',
+                  zone: 'Click to add vertices for a GEO Zone',
                 }[annotateMode]
               }
-              {annotateMode === 'line' && (
+              {(annotateMode === 'line' || annotateMode === 'zone') && (
                 <span className="ml-1 text-slate-500">· double-click to finish · Esc to cancel</span>
               )}
-              {annotateMode !== 'line' && annotateDraft.length > 0 && (
+              {annotateMode !== 'line' && annotateMode !== 'zone' && annotateDraft.length > 0 && (
                 <span className="ml-1 text-slate-500">· Esc to cancel</span>
               )}
             </span>

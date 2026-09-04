@@ -99,6 +99,12 @@ export const api = {
     create: (payload) => unwrap(client.post('/annotations', payload)),
     remove: (id) => unwrap(client.delete(`/annotations/${id}`)),
   },
+
+  geoZones: {
+    list: () => unwrap(client.get('/geo-zones')),
+    create: (payload) => unwrap(client.post('/geo-zones', payload)),
+    remove: (id) => unwrap(client.delete(`/geo-zones/${id}`)),
+  },
 };
 
 export default api;

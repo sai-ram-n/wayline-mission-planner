@@ -156,6 +156,17 @@ export const annotationCreateSchema = z.object({
   ]),
 });
 
+/**
+ * Read-only-on-the-map geofence polygons. DJI's own zones are org-provisioned
+ * data this app has no equivalent source for, so these are user-authored —
+ * see repository.js's createGeoZone.
+ */
+export const geoZoneCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  kind: z.enum(['geo_zone', 'task_area']).optional().default('geo_zone'),
+  vertices: z.array(point).min(3, 'A zone needs at least 3 vertices'),
+});
+
 export const droneCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   model: z.string().trim().min(1).max(60),

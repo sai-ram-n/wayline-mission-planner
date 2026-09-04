@@ -72,6 +72,14 @@ export const MAP_COLORS = {
     an approximation, not a measurement.
   */
   gimbalMarker: '#40C8E0',
+
+  /*
+    GEO Zone / Task Area overlays (feature-gap audit §"GEO Zone / Task Area map
+    overlays") — the two-tone yellow/green scheme the source document describes
+    (§3/§13), not a measured value.
+  */
+  geoZone: '#eab308',
+  taskArea: '#22c55e',
 };
 
 /** Fill and outline opacities for the coverage wedges, measured (§1). */

@@ -114,6 +114,19 @@ db.exec(`
     created_at  TEXT NOT NULL
   );
 
+  -- Read-only-on-the-map geofence polygons (feature-gap audit §"GEO Zone /
+  -- Task Area map overlays"). DJI's own zones are org-provisioned; this app
+  -- has no org/project layer, so these are user-authored placeholder data —
+  -- see repository.js's createGeoZone.
+  CREATE TABLE IF NOT EXISTS geo_zones (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    -- 'geo_zone' | 'task_area'
+    kind        TEXT NOT NULL DEFAULT 'geo_zone',
+    vertices    TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_waypoints_wayline    ON waypoints(wayline_id, order_index);
   CREATE INDEX IF NOT EXISTS idx_actions_waypoint     ON waypoint_actions(waypoint_id, order_index);
   CREATE INDEX IF NOT EXISTS idx_assignments_wayline  ON assignments(wayline_id);

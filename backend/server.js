@@ -8,6 +8,7 @@ import annotationsRouter from './routes/annotations.js';
 import assignmentsRouter from './routes/assignments.js';
 import dronesRouter from './routes/drones.js';
 import foldersRouter from './routes/folders.js';
+import geoZonesRouter from './routes/geoZones.js';
 import waylinesRouter from './routes/waylines.js';
 import * as constants from './constants.js';
 import { VERSION, BUILD_DATE, APP_NAME } from '../version.js';
@@ -77,6 +78,7 @@ app.use('/api/folders', foldersRouter);
 app.use('/api/drones', dronesRouter);
 app.use('/api/assignments', assignmentsRouter);
 app.use('/api/annotations', annotationsRouter);
+app.use('/api/geo-zones', geoZonesRouter);
 
 app.use(notFound);
 app.use(errorHandler);

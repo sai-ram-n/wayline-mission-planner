@@ -324,6 +324,47 @@ export function deleteAnnotation(id) {
   return annotationStmt.remove.run(id).changes > 0;
 }
 
+// ---------------------------------------------------------------- geo zones
+
+const geoZoneStmt = {
+  list: db.prepare('SELECT * FROM geo_zones ORDER BY created_at'),
+  insert: db.prepare(`
+    INSERT INTO geo_zones (id, name, kind, vertices, created_at)
+    VALUES (@id, @name, @kind, @vertices, @created_at)
+  `),
+  remove: db.prepare('DELETE FROM geo_zones WHERE id = ?'),
+};
+
+function rowToGeoZone(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    kind: row.kind,
+    vertices: JSON.parse(row.vertices),
+    created_at: row.created_at,
+  };
+}
+
+export function listGeoZones() {
+  return geoZoneStmt.list.all().map(rowToGeoZone);
+}
+
+export function createGeoZone(input) {
+  const id = randomUUID();
+  geoZoneStmt.insert.run({
+    id,
+    name: input.name,
+    kind: input.kind,
+    vertices: JSON.stringify(input.vertices),
+    created_at: nowIso(),
+  });
+  return id;
+}
+
+export function deleteGeoZone(id) {
+  return geoZoneStmt.remove.run(id).changes > 0;
+}
+
 /**
  * Combine several waylines into one new wayline.
  *
