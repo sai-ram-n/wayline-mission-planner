@@ -29,6 +29,12 @@ export const ACTION_MENU = [
   'takePhoto',
   'zoom',
   'createFolder',
+  // Smart Capture (BETA), confirmed as a paired start/stop action on the M4D
+  // test route (DJI-Matrice-4D-audit.md §8/§9). No verified WPML export exists
+  // for it — see backend UNVERIFIED_WPML_ACTIONS — so it is editable here but
+  // excluded from the .kmz.
+  'startIntelligentDetection',
+  'stopIntelligentDetection',
 ];
 
 /** The four actions written by "synchronize attitude on new waypoint" (§4). */
@@ -76,6 +82,22 @@ export function defaultParams(actionType, settings = {}) {
       return media;
     case 'createFolder':
       return { folderName: '' };
+    // Smart Capture (BETA) — parameter shape from docs/feature-reference.md
+    // §8.3 (the same source project's Patrol Route exploration; this app's own
+    // established reference for what this control panel looks like). Exact
+    // WPML export is unverified — see UNVERIFIED_WPML_ACTIONS in the backend.
+    case 'startIntelligentDetection':
+      return {
+        subjects: {
+          people: { enabled: true, count: 1 },
+          vehicles: { enabled: false, count: 1 },
+          boats: { enabled: false, count: 1 },
+        },
+        confidenceLevel: 55,
+        alertInterval: 2,
+        camera: 'wide',
+        photoStorage: [...(settings.lenses ?? [])],
+      };
     default:
       return {};
   }
@@ -92,6 +114,7 @@ export function defaultParams(actionType, settings = {}) {
 export function cameraStateAt(waypoints = [], waypointIndex = 0, actionIndex = Infinity) {
   let recording = false;
   let intervalShooting = false;
+  let detecting = false;
 
   for (let i = 0; i <= waypointIndex && i < waypoints.length; i += 1) {
     const actions = waypoints[i].actions ?? [];
@@ -111,12 +134,18 @@ export function cameraStateAt(waypoints = [], waypointIndex = 0, actionIndex = I
         case 'stopShoot':
           intervalShooting = false;
           break;
+        case 'startIntelligentDetection':
+          detecting = true;
+          break;
+        case 'stopIntelligentDetection':
+          detecting = false;
+          break;
         default:
           break;
       }
     }
   }
-  return { recording, intervalShooting };
+  return { recording, intervalShooting, detecting };
 }
 
 /**
@@ -126,7 +155,7 @@ export function cameraStateAt(waypoints = [], waypointIndex = 0, actionIndex = I
  * explain itself instead of appearing broken.
  */
 export function actionAvailability(actionType, state, context = {}) {
-  const { recording, intervalShooting } = state;
+  const { recording, intervalShooting, detecting } = state;
 
   switch (actionType) {
     case 'takePhoto':
@@ -177,6 +206,16 @@ export function actionAvailability(actionType, state, context = {}) {
       return intervalShooting
         ? { allowed: true }
         : { allowed: false, reason: 'No interval shot is running.' };
+
+    case 'startIntelligentDetection':
+      return detecting
+        ? { allowed: false, reason: 'Intelligent Detection is already running.' }
+        : { allowed: true };
+
+    case 'stopIntelligentDetection':
+      return detecting
+        ? { allowed: true }
+        : { allowed: false, reason: 'Intelligent Detection is not running.' };
 
     default:
       return { allowed: true };

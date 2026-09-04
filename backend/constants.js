@@ -200,6 +200,11 @@ export const ACTION_TYPES = [
   'zoom',
   'panorama',
   'createFolder',
+  // Smart Capture (BETA), DJI-Matrice-4D-audit.md §8/§9: confirmed present as a
+  // paired start/stop action on the live M4D route, but no WPML mapping was ever
+  // captured for it (it's a BETA feature) — see UNVERIFIED_WPML_ACTIONS below.
+  'startIntelligentDetection',
+  'stopIntelligentDetection',
 ];
 
 export const ACTION_LABELS = {
@@ -217,6 +222,8 @@ export const ACTION_LABELS = {
   zoom: 'Camera Zoom',
   panorama: 'Pano',
   createFolder: 'Create Folder',
+  startIntelligentDetection: 'Start Intelligent Detection',
+  stopIntelligentDetection: 'End Intelligent Detection',
 };
 
 /** WPML actionActuatorFunc for each action type. */
@@ -235,7 +242,18 @@ export const ACTION_ACTUATOR = {
   zoom: 'zoom',
   panorama: 'panoShot',
   createFolder: 'customDirName',
+  // Deliberately no entry for startIntelligentDetection/stopIntelligentDetection:
+  // no verified WPML actuator function exists for this BETA feature.
+  // UNVERIFIED_WPML_ACTIONS (below) is how wpml.js excludes them from the
+  // exported .kmz rather than guessing at a mapping.
 };
+
+/**
+ * Action types with no confirmed WPML export mapping. Kept fully editable in
+ * the app's own data model, but excluded from buildKmz()'s actionGroup so the
+ * exported .kmz never carries an invented actuator function.
+ */
+export const UNVERIFIED_WPML_ACTIONS = ['startIntelligentDetection', 'stopIntelligentDetection'];
 
 /** Actions that carry the file-name + lens chips + Follow Route block (§6). */
 export const ACTIONS_WITH_MEDIA_PARAMS = [
@@ -247,7 +265,12 @@ export const ACTIONS_WITH_MEDIA_PARAMS = [
 ];
 
 /** Actions with no parameters at all (§6). */
-export const ACTIONS_WITHOUT_PARAMS = ['stopRecord', 'stopShoot', 'panorama'];
+export const ACTIONS_WITHOUT_PARAMS = [
+  'stopRecord',
+  'stopShoot',
+  'panorama',
+  'stopIntelligentDetection',
+];
 
 /** Actions that count toward the "Photos" statistic. */
 export const PHOTO_ACTIONS = ['takePhoto', 'takePhotoFixedAngle', 'panorama'];

@@ -19,6 +19,8 @@ import {
   LuZoomIn,
   LuPanelsTopLeft,
   LuFolderPlus,
+  LuScanEye,
+  LuEyeOff,
 } from 'react-icons/lu';
 
 /** Icon per action type, used in the waypoint list and the action editor header. */
@@ -37,6 +39,8 @@ export const ACTION_ICONS = {
   zoom: LuZoomIn,
   panorama: LuPanelsTopLeft,
   createFolder: LuFolderPlus,
+  startIntelligentDetection: LuScanEye,
+  stopIntelligentDetection: LuEyeOff,
 };
 
 /** Map colours. Kept here so the polyline, markers and legend agree. */

@@ -20,6 +20,7 @@ import {
   DEFAULT_SETTINGS,
   HEIGHT_MODES,
   TEMPLATE_TYPE,
+  UNVERIFIED_WPML_ACTIONS,
 } from './constants.js';
 
 const NAMESPACE = 'http://www.dji.com/wpmz/1.0.6';
@@ -234,7 +235,13 @@ function actionXml(action, index) {
 
 /** One `Placemark` — a waypoint with its heading, turn and action parameters. */
 function placemarkXml(waypoint, index, settings) {
-  const actions = waypoint.actions ?? [];
+  // Smart Capture (startIntelligentDetection/stopIntelligentDetection) has no
+  // verified WPML actuator function — see UNVERIFIED_WPML_ACTIONS. Rather than
+  // guess at one, those actions stay editable in the app's own data but are
+  // left out of the exported .kmz entirely.
+  const actions = (waypoint.actions ?? []).filter(
+    (action) => !UNVERIFIED_WPML_ACTIONS.includes(action.action_type)
+  );
 
   const heading = [
     '        <wpml:waypointHeadingParam>',

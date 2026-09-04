@@ -312,6 +312,89 @@ function ActionParams({ action, onChange, lenses, disabled }) {
         />
       );
 
+    // Smart Capture (BETA) — parameter shape from feature-reference.md §8.3
+    // (Patrol Route's Smart Capture Alerts panel, the closest verified source
+    // for this control on this aircraft family). Not exported to WPML — see
+    // UNVERIFIED_WPML_ACTIONS.
+    case 'startIntelligentDetection': {
+      const subjects = params.subjects ?? {};
+      const setSubject = (key, patch) =>
+        onChange({ subjects: { ...subjects, [key]: { ...subjects[key], ...patch } } });
+      const SUBJECTS = [
+        ['people', 'People'],
+        ['vehicles', 'Vehicles'],
+        ['boats', 'Boats'],
+      ];
+      return (
+        <>
+          <p className="text-[10px] leading-snug text-amber-400/80">
+            BETA — no confirmed export mapping. This action is saved with the
+            route but left out of the downloaded .kmz.
+          </p>
+          {SUBJECTS.map(([key, label]) => {
+            const subject = subjects[key] ?? { enabled: false, count: 1 };
+            return (
+              <div key={key} className="flex items-end gap-2">
+                <div className="flex-1">
+                  <ToggleField
+                    label={label}
+                    value={!!subject.enabled}
+                    onChange={(enabled) => setSubject(key, { enabled })}
+                    disabled={disabled}
+                  />
+                </div>
+                <NumberStepper
+                  label="Warning ≥"
+                  value={subject.count ?? 1}
+                  onChange={(count) => setSubject(key, { count })}
+                  min={1}
+                  max={50}
+                  disabled={disabled || !subject.enabled}
+                />
+              </div>
+            );
+          })}
+          <SliderField
+            label="Confidence Level"
+            value={params.confidenceLevel ?? 55}
+            onChange={(confidenceLevel) => onChange({ confidenceLevel })}
+            min={0}
+            max={100}
+            unit="%"
+            disabled={disabled}
+          />
+          <NumberStepper
+            label="Alert Interval"
+            value={params.alertInterval ?? 2}
+            onChange={(alertInterval) => onChange({ alertInterval })}
+            min={1}
+            max={60}
+            steps={[1, 5, 10]}
+            unit="s"
+            disabled={disabled}
+          />
+          <SelectField
+            label="Camera for Recognition"
+            value={params.camera ?? 'wide'}
+            options={[
+              { value: 'wide', label: 'Wide Angle' },
+              { value: '3x', label: '3× Visible' },
+              { value: '7x', label: '7× Visible' },
+            ]}
+            onChange={(camera) => onChange({ camera })}
+            disabled={disabled}
+          />
+          <ChipGroup
+            label="Photo Storage"
+            value={params.photoStorage ?? []}
+            options={lenses.map((lens) => ({ value: lens, label: LENS_LABELS[lens] ?? lens }))}
+            onChange={(photoStorage) => onChange({ photoStorage })}
+            disabled={disabled}
+          />
+        </>
+      );
+    }
+
     default:
       return (
         <p className="text-[11px] leading-snug text-slate-500">

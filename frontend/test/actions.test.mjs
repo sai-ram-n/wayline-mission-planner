@@ -17,8 +17,10 @@ import { AIRCRAFT } from '../../backend/constants.js';
 import {
   ACTION_MENU,
   ATTITUDE_ACTIONS,
+  actionAvailability,
   actionMenuFor,
   attitudeActionsFor,
+  cameraStateAt,
   defaultParams,
 } from '../src/lib/actions.js';
 
@@ -56,4 +58,44 @@ test('other aircraft (M30T) are unaffected by the M4D fix', () => {
   assert.deepEqual(menu, ACTION_MENU);
   const attitude = attitudeActionsFor(meta, 'M30', 'M30T');
   assert.deepEqual(attitude, ATTITUDE_ACTIONS);
+});
+
+/* ---------------------------------------- Smart Capture / Intelligent Detection */
+
+test('Intelligent Detection is a paired start/stop action, like recording', () => {
+  const waypoints = [{ actions: [{ action_type: 'startIntelligentDetection', params: {} }] }];
+
+  const stateAfterStart = cameraStateAt(waypoints, 0);
+  assert.equal(stateAfterStart.detecting, true);
+  assert.deepEqual(
+    actionAvailability('startIntelligentDetection', stateAfterStart),
+    { allowed: false, reason: 'Intelligent Detection is already running.' }
+  );
+  assert.deepEqual(actionAvailability('stopIntelligentDetection', stateAfterStart), {
+    allowed: true,
+  });
+
+  const stateBeforeStart = cameraStateAt([], 0);
+  assert.equal(stateBeforeStart.detecting, false);
+  assert.deepEqual(actionAvailability('startIntelligentDetection', stateBeforeStart), {
+    allowed: true,
+  });
+  assert.deepEqual(
+    actionAvailability('stopIntelligentDetection', stateBeforeStart),
+    { allowed: false, reason: 'Intelligent Detection is not running.' }
+  );
+});
+
+test('starting Intelligent Detection defaults People on and a 55% confidence level', () => {
+  const params = defaultParams('startIntelligentDetection', { lenses: ['visible'] });
+  assert.equal(params.subjects.people.enabled, true);
+  assert.equal(params.subjects.vehicles.enabled, false);
+  assert.equal(params.confidenceLevel, 55);
+  assert.deepEqual(params.photoStorage, ['visible']);
+});
+
+test('Intelligent Detection is offered in the Matrice 4D action menu', () => {
+  const menu = actionMenuFor(meta, 'M4D', 'M4D');
+  assert.ok(menu.includes('startIntelligentDetection'));
+  assert.ok(menu.includes('stopIntelligentDetection'));
 });

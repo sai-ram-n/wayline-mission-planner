@@ -262,6 +262,32 @@ test('the sidecar never replaces the DJI files', async () => {
   assert.match(template, /<wpml:droneEnumValue>0<\/wpml:droneEnumValue>/);
 });
 
+test('Smart Capture actions are kept in the app data but left out of the exported .kmz', async () => {
+  const source = await parseKmz(await fixture('reference-empty-route.kmz'));
+  const waypoint = {
+    lat: -37.8079,
+    lng: 145.2841,
+    height: 100,
+    actions: [
+      { action_type: 'takePhoto', params: { fileSuffix: '', followRoute: true, lenses: [] } },
+      { action_type: 'startIntelligentDetection', params: { confidenceLevel: 55 } },
+      { action_type: 'stopIntelligentDetection', params: {} },
+    ],
+  };
+  const kmz = await buildKmz({
+    ...source,
+    aircraft_series: 'M4D',
+    aircraft_model: 'M4D',
+    waypoints: [waypoint],
+  });
+  const wpml = await unzipText(kmz, 'wpmz/waylines.wpml');
+
+  // The supported action still exports normally...
+  assert.match(wpml, /<wpml:actionActuatorFunc>takePhoto<\/wpml:actionActuatorFunc>/);
+  // ...but no invented actuator function is ever written for the BETA action.
+  assert.doesNotMatch(wpml, /IntelligentDetection/);
+});
+
 test('a foreign kmz with no sidecar still falls back honestly', async () => {
   // Strip our sidecar to simulate a file exported by someone else.
   const { default: JSZip } = await import('jszip');
