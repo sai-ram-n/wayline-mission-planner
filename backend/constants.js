@@ -68,7 +68,18 @@ export const AIRCRAFT = {
     label: 'Matrice 4D Series',
     accessories: ['AS1 Speaker', 'AL1 SpotLight'],
     models: {
-      M4D: { label: 'Matrice 4D', lenses: ['visible'] },
+      M4D: {
+        label: 'Matrice 4D',
+        lenses: ['visible'],
+        // DJI-Matrice-4D-audit.md §1/§7/§12, observed directly on the Matrice 4D
+        // test route (not just its 4TD sibling below): Smart Low-Light and Bypass
+        // Obstacle are present, Camera Zoom actions default to 7X, and only
+        // Gimbal Tilt is offered — no separate Gimbal Yaw control.
+        smartLowLight: true,
+        defaultZoomRatio: 7,
+        excludedActions: ['gimbalYaw'],
+        bypassObstacle: true,
+      },
       M4TD: {
         label: 'Matrice 4TD',
         verified: true,
