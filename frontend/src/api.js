@@ -93,6 +93,12 @@ export const api = {
     setStatus: (id, status) => unwrap(client.patch(`/assignments/${id}`, { status })),
     remove: (id) => unwrap(client.delete(`/assignments/${id}`)),
   },
+
+  annotations: {
+    list: () => unwrap(client.get('/annotations')),
+    create: (payload) => unwrap(client.post('/annotations', payload)),
+    remove: (id) => unwrap(client.delete(`/annotations/${id}`)),
+  },
 };
 
 export default api;

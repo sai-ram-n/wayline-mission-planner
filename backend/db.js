@@ -97,6 +97,23 @@ db.exec(`
     status      TEXT NOT NULL DEFAULT 'pending'
   );
 
+  -- Free-standing map markup (feature-gap audit §"Map annotation, measurement,
+  -- and rectangle/circle draw tools") — independent of any one wayline's route
+  -- geometry, the same way DJI FlightHub's annotation layer sits under every
+  -- route on the project map.
+  CREATE TABLE IF NOT EXISTS annotations (
+    id          TEXT PRIMARY KEY,
+    -- 'point' | 'line' | 'rectangle' | 'circle'
+    kind        TEXT NOT NULL,
+    color       TEXT NOT NULL DEFAULT '#2d8cf0',
+    label       TEXT NOT NULL DEFAULT '',
+    -- Shape-dependent: point {lat,lng}; line [{lat,lng}, ...];
+    -- rectangle [{lat,lng}, {lat,lng}] (opposite corners);
+    -- circle {center:{lat,lng}, radiusMeters}.
+    geometry    TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_waypoints_wayline    ON waypoints(wayline_id, order_index);
   CREATE INDEX IF NOT EXISTS idx_actions_waypoint     ON waypoint_actions(waypoint_id, order_index);
   CREATE INDEX IF NOT EXISTS idx_assignments_wayline  ON assignments(wayline_id);

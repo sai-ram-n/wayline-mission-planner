@@ -143,6 +143,19 @@ export const folderCreateSchema = z.object({
   parent_id: z.string().uuid().nullable().optional(),
 });
 
+/** Free-standing map markup — point/line/rectangle/circle, per shape below. */
+const point = z.object({ lat, lng });
+export const annotationCreateSchema = z.object({
+  kind: z.enum(['point', 'line', 'rectangle', 'circle']),
+  color: z.string().trim().min(1).max(20).optional().default('#2d8cf0'),
+  label: z.string().max(200).optional().default(''),
+  geometry: z.union([
+    point, // point
+    z.array(point).min(2), // line (>=2 vertices) or rectangle (exactly 2 opposite corners)
+    z.object({ center: point, radiusMeters: z.number().positive() }), // circle
+  ]),
+});
+
 export const droneCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   model: z.string().trim().min(1).max(60),

@@ -4,6 +4,7 @@ import express from 'express';
 import helmet from 'helmet';
 
 import { errorHandler, notFound } from './middleware.js';
+import annotationsRouter from './routes/annotations.js';
 import assignmentsRouter from './routes/assignments.js';
 import dronesRouter from './routes/drones.js';
 import foldersRouter from './routes/folders.js';
@@ -75,6 +76,7 @@ app.use('/api/waylines', waylinesRouter);
 app.use('/api/folders', foldersRouter);
 app.use('/api/drones', dronesRouter);
 app.use('/api/assignments', assignmentsRouter);
+app.use('/api/annotations', annotationsRouter);
 
 app.use(notFound);
 app.use(errorHandler);

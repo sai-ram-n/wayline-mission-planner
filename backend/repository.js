@@ -281,6 +281,49 @@ export function waylineExists(id) {
   return Boolean(stmt.getWayline.get(id));
 }
 
+// ---------------------------------------------------------------- annotations
+
+const annotationStmt = {
+  list: db.prepare('SELECT * FROM annotations ORDER BY created_at'),
+  insert: db.prepare(`
+    INSERT INTO annotations (id, kind, color, label, geometry, created_at)
+    VALUES (@id, @kind, @color, @label, @geometry, @created_at)
+  `),
+  remove: db.prepare('DELETE FROM annotations WHERE id = ?'),
+};
+
+function rowToAnnotation(row) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    color: row.color,
+    label: row.label,
+    geometry: JSON.parse(row.geometry),
+    created_at: row.created_at,
+  };
+}
+
+export function listAnnotations() {
+  return annotationStmt.list.all().map(rowToAnnotation);
+}
+
+export function createAnnotation(input) {
+  const id = randomUUID();
+  annotationStmt.insert.run({
+    id,
+    kind: input.kind,
+    color: input.color,
+    label: input.label,
+    geometry: JSON.stringify(input.geometry),
+    created_at: nowIso(),
+  });
+  return id;
+}
+
+export function deleteAnnotation(id) {
+  return annotationStmt.remove.run(id).changes > 0;
+}
+
 /**
  * Combine several waylines into one new wayline.
  *

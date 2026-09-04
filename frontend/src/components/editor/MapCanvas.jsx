@@ -7,12 +7,14 @@
  */
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Circle,
   CircleMarker,
   MapContainer,
   Marker,
   Polygon,
   Polyline,
   Popup,
+  Rectangle,
   ScaleControl,
   TileLayer,
   useMap,
@@ -22,13 +24,17 @@ import L from 'leaflet';
 import {
   LuBox,
   LuCheck,
+  LuCircle,
   LuCrosshair,
   LuLayers,
   LuLoaderCircle,
+  LuMapPinPlus,
   LuMaximize,
   LuMapPin,
   LuPencil,
+  LuRuler,
   LuSearch,
+  LuSquare,
   LuTrash2,
   LuUndo2,
   LuX,
@@ -45,11 +51,13 @@ import {
   coverageWedge,
   headingAt,
   heightAt,
+  metresBetween,
   offsetLatLng,
   waypointBounds,
 } from '../../lib/geo.js';
 import { groundClearance, rangeFor, wideHFov, zoomHFov, zoomRatioAt } from '../../lib/camera.js';
 import { buildSearchUrl, parseSearchResults } from '../../lib/geocode.js';
+import api from '../../api.js';
 import Map3DOverlay from './Map3DOverlay.jsx';
 import {
   DEFAULT_EXAGGERATION,
@@ -428,6 +436,105 @@ export default function MapCanvas({
   const [basemap, setBasemap] = useState('street');
   const mapRef = useRef(null);
 
+  /* -------------------------------------------------------- annotations */
+  /*
+    Free-standing map markup (feature-gap audit §"Map annotation, measurement,
+    and rectangle/circle draw tools") — deliberately independent of any one
+    wayline's route geometry (`geometry`/`drawMode` above are mission data
+    driven by the parent page; these are project-wide map chrome instead, the
+    same way DJI FlightHub's annotation layer sits under every route). Fetched
+    directly here rather than threaded through both Editor.jsx and Library.jsx
+    as props, since both already mount this component and neither otherwise
+    owns anything about the map's own chrome layers (basemap choice, 2D/3D,
+    etc. are also local state here).
+  */
+  const [annotations, setAnnotations] = useState([]);
+  const [annotateMode, setAnnotateMode] = useState(null); // 'point'|'line'|'rectangle'|'circle'|null
+  const [annotateDraft, setAnnotateDraft] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.annotations
+      .list()
+      .then((list) => {
+        if (!cancelled) setAnnotations(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // A parent-driven mapping-route drawMode takes priority; don't leave an
+  // annotate tool armed underneath it.
+  useEffect(() => {
+    if (drawMode) {
+      setAnnotateMode(null);
+      setAnnotateDraft([]);
+    }
+  }, [drawMode]);
+
+  const submitAnnotation = (kind, geometry) => {
+    api.annotations
+      .create({ kind, geometry })
+      .then((created) => setAnnotations((current) => [...current, created]))
+      .catch(() => {});
+  };
+
+  const handleAnnotateClick = (latlng) => {
+    if (annotateMode === 'point') {
+      submitAnnotation('point', { lat: latlng.lat, lng: latlng.lng });
+      return;
+    }
+    if (annotateMode === 'line') {
+      setAnnotateDraft((current) => [...current, latlng]);
+      return;
+    }
+    if (annotateMode === 'rectangle') {
+      const next = [...annotateDraft, latlng];
+      if (next.length < 2) {
+        setAnnotateDraft(next);
+        return;
+      }
+      submitAnnotation(
+        'rectangle',
+        next.map((p) => ({ lat: p.lat, lng: p.lng }))
+      );
+      setAnnotateDraft([]);
+      return;
+    }
+    if (annotateMode === 'circle') {
+      const next = [...annotateDraft, latlng];
+      if (next.length < 2) {
+        setAnnotateDraft(next);
+        return;
+      }
+      const [center, edge] = next;
+      submitAnnotation('circle', {
+        center: { lat: center.lat, lng: center.lng },
+        radiusMeters: Math.max(1, metresBetween(center, edge)),
+      });
+      setAnnotateDraft([]);
+    }
+  };
+
+  const finishAnnotationLine = () => {
+    if (annotateDraft.length >= 2) {
+      submitAnnotation(
+        'line',
+        annotateDraft.map((p) => ({ lat: p.lat, lng: p.lng }))
+      );
+    }
+    setAnnotateDraft([]);
+  };
+
+  const deleteAnnotation = (id) => {
+    api.annotations
+      .remove(id)
+      .then(() => setAnnotations((current) => current.filter((a) => a.id !== id)))
+      .catch(() => {});
+  };
+
   /* --------------------------------------------------------- tilted view */
 
   // View state only: never written to the mission, so switching cannot dirty it.
@@ -573,6 +680,10 @@ export default function MapCanvas({
       onDrawVertex?.(latlng);
       return;
     }
+    if (annotateMode) {
+      handleAnnotateClick(latlng);
+      return;
+    }
     onAddWaypoint?.(latlng);
   };
 
@@ -585,6 +696,16 @@ export default function MapCanvas({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [drawMode, onCancelDrawing]);
+
+  // Esc also cancels an in-progress annotation line/rectangle/circle.
+  useEffect(() => {
+    if (!annotateDraft.length) return undefined;
+    const onKey = (event) => {
+      if (event.key === 'Escape') setAnnotateDraft([]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [annotateDraft.length]);
 
   const fitRoute = () => {
     const bounds = waypointBounds(waypoints);
@@ -691,8 +812,11 @@ export default function MapCanvas({
         />
         <ClickHandler
           onMapClick={handleMapClick}
-          onMapDoubleClick={() => onFinishDrawing?.()}
-          drawing={!!drawMode}
+          onMapDoubleClick={() => {
+            if (annotateMode === 'line') finishAnnotationLine();
+            else onFinishDrawing?.();
+          }}
+          drawing={!!drawMode || (annotateMode === 'line' && annotateDraft.length > 0)}
         />
         <FitOnLoad waypoints={waypoints} trigger={fitTrigger} />
 
@@ -768,6 +892,127 @@ export default function MapCanvas({
               />
             ))}
           </>
+        )}
+
+        {/* Committed free-standing annotations (points/lines/rectangles/circles). */}
+        {flat && annotations.map((annotation) => {
+          const key = annotation.id;
+          const pathOptions = { color: annotation.color, weight: 2, fillOpacity: 0.15 };
+          const label = annotation.label || null;
+          if (annotation.kind === 'point') {
+            return (
+              <CircleMarker
+                key={key}
+                center={[annotation.geometry.lat, annotation.geometry.lng]}
+                radius={6}
+                pathOptions={{ ...pathOptions, fillColor: annotation.color, fillOpacity: 1 }}
+              >
+                <Popup>
+                  <span className="text-xs">{label ?? 'Annotation'}</span>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => deleteAnnotation(annotation.id)}
+                      className="mt-1 block text-xs text-red-600 underline"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </Popup>
+              </CircleMarker>
+            );
+          }
+          if (annotation.kind === 'line') {
+            return (
+              <Polyline
+                key={key}
+                positions={annotation.geometry.map((p) => [p.lat, p.lng])}
+                pathOptions={pathOptions}
+              >
+                {(label || !readOnly) && (
+                  <Popup>
+                    <span className="text-xs">{label ?? 'Annotation'}</span>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => deleteAnnotation(annotation.id)}
+                        className="mt-1 block text-xs text-red-600 underline"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </Popup>
+                )}
+              </Polyline>
+            );
+          }
+          if (annotation.kind === 'rectangle') {
+            const [a, b] = annotation.geometry;
+            return (
+              <Rectangle
+                key={key}
+                bounds={[
+                  [a.lat, a.lng],
+                  [b.lat, b.lng],
+                ]}
+                pathOptions={pathOptions}
+              >
+                {(label || !readOnly) && (
+                  <Popup>
+                    <span className="text-xs">{label ?? 'Annotation'}</span>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => deleteAnnotation(annotation.id)}
+                        className="mt-1 block text-xs text-red-600 underline"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </Popup>
+                )}
+              </Rectangle>
+            );
+          }
+          // circle
+          return (
+            <Circle
+              key={key}
+              center={[annotation.geometry.center.lat, annotation.geometry.center.lng]}
+              radius={annotation.geometry.radiusMeters}
+              pathOptions={pathOptions}
+            >
+              {(label || !readOnly) && (
+                <Popup>
+                  <span className="text-xs">{label ?? 'Annotation'}</span>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => deleteAnnotation(annotation.id)}
+                      className="mt-1 block text-xs text-red-600 underline"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </Popup>
+              )}
+            </Circle>
+          );
+        })}
+
+        {/* The annotation currently being placed (line/rectangle/circle mid-click). */}
+        {flat && annotateDraft.length > 0 && annotateMode === 'line' && (
+          <Polyline
+            positions={annotateDraft}
+            pathOptions={{ color: MAP_COLORS.route, weight: 2, dashArray: '4 4' }}
+          />
+        )}
+        {flat && annotateDraft.length === 1 && (annotateMode === 'rectangle' || annotateMode === 'circle') && (
+          <CircleMarker
+            center={annotateDraft[0]}
+            radius={4}
+            pathOptions={{ color: '#fff', weight: 2, fillColor: MAP_COLORS.route, fillOpacity: 1 }}
+          />
         )}
 
         {/*
@@ -1037,6 +1282,41 @@ export default function MapCanvas({
           <LuLayers className="h-4 w-4" />
         </button>
 
+        {/*
+          Annotation tools (feature-gap audit §"Map annotation, measurement,
+          and rectangle/circle draw tools"), independent of the mapping-route
+          drawMode above. Hidden read-only/3D, same as the other edit-only
+          controls — see handleMapClick and the drawMode-priority effect.
+        */}
+        {!is3D && !readOnly && (
+          <div className="pointer-events-auto flex flex-col overflow-hidden rounded-md border border-panel-700 bg-panel-900/95 shadow-lg">
+            {[
+              { mode: 'point', Icon: LuMapPinPlus, hint: 'Add a point annotation' },
+              { mode: 'line', Icon: LuRuler, hint: 'Draw a line annotation (double-click to finish)' },
+              { mode: 'rectangle', Icon: LuSquare, hint: 'Draw a rectangle annotation (click two corners)' },
+              { mode: 'circle', Icon: LuCircle, hint: 'Draw a circle annotation (click centre, then edge)' },
+            ].map(({ mode, Icon, hint }, index) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setAnnotateDraft([]);
+                  setAnnotateMode((current) => (current === mode ? null : mode));
+                }}
+                title={hint}
+                aria-pressed={annotateMode === mode}
+                className={`p-2 transition-colors ${index > 0 ? 'border-t border-panel-700' : ''} ${
+                  annotateMode === mode
+                    ? 'bg-accent text-white'
+                    : 'text-slate-300 hover:bg-panel-700'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
+        )}
+
         {!is3D && <CompassWidget heading={selectedHeading} />}
       </div>
 
@@ -1159,6 +1439,40 @@ export default function MapCanvas({
               className="btn-ghost px-2 py-0.5 text-[11px]"
             >
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {annotateMode && (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-[400] flex justify-center">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-accent/40 bg-panel-900/95 px-4 py-1.5 text-xs text-slate-200 shadow-lg">
+            <LuCrosshair className="h-3.5 w-3.5 shrink-0 text-accent" />
+            <span>
+              {
+                {
+                  point: 'Click the map to place a point',
+                  line: 'Click to add vertices',
+                  rectangle: 'Click two opposite corners',
+                  circle: 'Click the centre, then the edge',
+                }[annotateMode]
+              }
+              {annotateMode === 'line' && (
+                <span className="ml-1 text-slate-500">· double-click to finish · Esc to cancel</span>
+              )}
+              {annotateMode !== 'line' && annotateDraft.length > 0 && (
+                <span className="ml-1 text-slate-500">· Esc to cancel</span>
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setAnnotateMode(null);
+                setAnnotateDraft([]);
+              }}
+              className="btn-ghost px-2 py-0.5 text-[11px]"
+            >
+              Done
             </button>
           </div>
         </div>
