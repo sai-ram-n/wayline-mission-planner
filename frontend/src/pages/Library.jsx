@@ -11,6 +11,7 @@ import {
   LuArrowUpWideNarrow,
   LuDownload,
   LuMapPin,
+  LuMerge,
   LuPlus,
   LuSearch,
   LuSpline,
@@ -260,6 +261,25 @@ export default function Library() {
       clearChecked();
     });
 
+  /**
+   * Concatenates the selected waylines' waypoints into a new one (this app's
+   * own defined behaviour — DJI's own Merge dialog was never exercised in the
+   * source exploration, see repository.js's mergeWaylines). Requires the same
+   * route type across the selection, mirroring the backend's 422 check.
+   */
+  const mergeableRouteType =
+    checkedWaylines.length >= 2 && checkedWaylines.every((w) => w.route_type === checkedWaylines[0].route_type)
+      ? checkedWaylines[0].route_type
+      : null;
+
+  const handleBulkMerge = () =>
+    run(async () => {
+      if (!mergeableRouteType) return;
+      const merged = await api.waylines.merge(checkedWaylines.map((w) => w.id));
+      clearChecked();
+      setSelectedId(merged.id);
+    });
+
   const handleImportFile = async (file) => {
     if (!file) return;
     setImporting(true);
@@ -455,6 +475,20 @@ export default function Library() {
             >
               <LuDownload className="h-3.5 w-3.5" />
               Download
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkMerge}
+              disabled={!mergeableRouteType}
+              title={
+                mergeableRouteType
+                  ? 'Combine the selected routes into one new route'
+                  : 'Select 2+ routes of the same type to merge'
+              }
+              className="btn-secondary px-2 py-1 text-[11px] disabled:opacity-40"
+            >
+              <LuMerge className="h-3.5 w-3.5" />
+              Merge
             </button>
             <button
               type="button"

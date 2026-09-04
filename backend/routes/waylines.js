@@ -5,11 +5,13 @@ import {
   duplicateWayline,
   getWayline,
   listWaylines,
+  mergeWaylines,
   patchWayline,
   updateWayline,
 } from '../repository.js';
 import {
   waylineCreateSchema,
+  waylineMergeSchema,
   waylinePatchSchema,
   waylineUpdateSchema,
 } from '../schemas.js';
@@ -69,6 +71,23 @@ router.post('/import', asyncHandler(async (req, res) => {
 
   const id = createWayline(parsed.data);
   res.status(201).json(getWayline(id));
+}));
+
+/**
+ * Combine several waylines into one (repository.js's mergeWaylines — this
+ * app's own defined behaviour; DJI's own Merge dialog was never exercised in
+ * the source exploration). Declared before /:id for the same reason /import is.
+ */
+router.post('/merge', validate(waylineMergeSchema), asyncHandler((req, res) => {
+  const { ids, name } = req.body;
+  const result = mergeWaylines(ids, name);
+  if (result.error === 'not_found') {
+    throw httpError(404, 'One or more of the selected routes could not be found');
+  }
+  if (result.error === 'mixed_route_types') {
+    throw httpError(422, 'Only routes of the same type can be merged');
+  }
+  res.status(201).json(getWayline(result.id));
 }));
 
 router.get('/:id/kmz', asyncHandler(async (req, res) => {

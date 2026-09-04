@@ -280,3 +280,40 @@ export const duplicateWayline = db.transaction((id, name) => {
 export function waylineExists(id) {
   return Boolean(stmt.getWayline.get(id));
 }
+
+/**
+ * Combine several waylines into one new wayline.
+ *
+ * DJI's own Merge dialog (feature-reference.md §2/§17) was never exercised in
+ * the source exploration, so there is no verified combining algorithm to
+ * replicate. This is this app's own defined behaviour, in the same spirit as
+ * the drone-fleet/assignment feature (§11.7): concatenate every source
+ * wayline's waypoints, in the order `ids` lists them, onto the first
+ * wayline's settings/aircraft/folder. All sources must share a route type —
+ * concatenating, say, a waypoint route with an area route's boustrophedon
+ * geometry has no defined meaning.
+ */
+export const mergeWaylines = db.transaction((ids, name) => {
+  const sources = ids.map((id) => getWayline(id)).filter(Boolean);
+  if (sources.length < 2) return { error: 'not_found' };
+
+  const routeTypes = new Set(sources.map((s) => s.route_type));
+  if (routeTypes.size > 1) return { error: 'mixed_route_types' };
+
+  const [first] = sources;
+  const waypoints = sources.flatMap((s) => s.waypoints);
+
+  const id = createWayline({
+    name: name || `${first.name} (merged)`,
+    description: first.description,
+    folder_id: first.folder_id,
+    route_type: first.route_type,
+    aircraft_series: first.aircraft_series,
+    aircraft_model: first.aircraft_model,
+    payload_model: first.payload_model,
+    settings: first.settings,
+    geometry: null,
+    waypoints,
+  });
+  return { id };
+});

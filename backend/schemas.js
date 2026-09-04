@@ -133,6 +133,11 @@ export const waylinePatchSchema = z
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'No fields to update' });
 
+export const waylineMergeSchema = z.object({
+  ids: z.array(z.string().uuid()).min(2, 'Select at least two routes to merge'),
+  name: z.string().trim().min(1).max(120).optional(),
+});
+
 export const folderCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   parent_id: z.string().uuid().nullable().optional(),

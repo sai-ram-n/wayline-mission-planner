@@ -57,6 +57,7 @@ export const api = {
     update: (id, payload) => unwrap(client.put(`/waylines/${id}`, payload)),
     patch: (id, fields) => unwrap(client.patch(`/waylines/${id}`, fields)),
     duplicate: (id, name) => unwrap(client.post(`/waylines/${id}/duplicate`, name ? { name } : {})),
+    merge: (ids, name) => unwrap(client.post('/waylines/merge', name ? { ids, name } : { ids })),
     remove: (id) => unwrap(client.delete(`/waylines/${id}`)),
 
     /** Direct download URL — the browser fetches it so the file never passes through JS. */
