@@ -13,6 +13,7 @@ import {
   Polygon,
   Polyline,
   Popup,
+  ScaleControl,
   TileLayer,
   useMap,
   useMapEvents,
@@ -40,6 +41,7 @@ import {
   bearingBetween,
   coverageWedge,
   headingAt,
+  heightAt,
   offsetLatLng,
   waypointBounds,
 } from '../../lib/geo.js';
@@ -263,6 +265,38 @@ function MapRefBridge({ onReady }) {
   return null;
 }
 
+/**
+ * Heading readout for the map's control cluster (feature-gap audit §"Compass /
+ * heading indicator"). Leaflet has no built-in map-rotation control, so this is
+ * a needle-and-degree indicator rather than a rotating basemap — it shows the
+ * selected waypoint's heading, not an interactive bearing control.
+ */
+function CompassWidget({ heading }) {
+  const known = heading != null;
+  const angle = known ? heading : 0;
+  return (
+    <div
+      title={known ? `Heading ${Math.round(angle)}°` : 'Select a waypoint to see its heading'}
+      className="pointer-events-auto flex h-9 w-9 flex-col items-center justify-center rounded-full border border-panel-700 bg-panel-900/95 shadow-lg"
+    >
+      <div
+        aria-hidden
+        className="relative h-5 w-5"
+        style={{ transform: `rotate(${angle}deg)`, transition: 'transform 200ms ease-out' }}
+      >
+        <span
+          className={`absolute left-1/2 top-0 h-0 w-0 -translate-x-1/2 border-x-[4px] border-b-[9px] border-x-transparent ${
+            known ? 'border-b-accent' : 'border-b-slate-600'
+          }`}
+        />
+      </div>
+      <span className={`text-[8px] font-medium ${known ? 'text-slate-300' : 'text-slate-600'}`}>
+        {known ? `${Math.round(angle)}°` : 'N'}
+      </span>
+    </div>
+  );
+}
+
 export default function MapCanvas({
   waypoints = [],
   takeoffPoint = null,
@@ -426,6 +460,13 @@ export default function MapCanvas({
   */
   const coverageFov = wideHFov(aircraftModel);
 
+  // Feeds the compass widget and the coordinate/altitude readout below.
+  const selectedWaypoint =
+    selectedIndex != null ? waypoints[selectedIndex] : null;
+  const selectedHeading = selectedWaypoint
+    ? headingAt(waypoints, selectedIndex, settings)
+    : null;
+
   const handleMapClick = (latlng) => {
     // The tilted view is view-only: Leaflet's screen-to-latlng is unreliable
     // under a CSS 3D transform, so a click would land in the wrong place.
@@ -546,6 +587,8 @@ export default function MapCanvas({
         attributionControl
       >
         <TileLayer url={tiles.url} attribution={tiles.attribution} maxZoom={tiles.maxZoom} />
+        {/* Persistent scale bar (feature-gap audit §"coordinate/altitude reference display"). */}
+        <ScaleControl position="bottomleft" metric imperial={false} />
 
         <MapRefBridge
           onReady={(m) => {
@@ -886,7 +929,31 @@ export default function MapCanvas({
         >
           <LuLayers className="h-4 w-4" />
         </button>
+
+        {!is3D && <CompassWidget heading={selectedHeading} />}
       </div>
+
+      {/*
+        Persistent coordinate/altitude/datum readout (feature-gap audit
+        §"coordinate/altitude reference display"). View-only, so it stays out of
+        the way of the tilted-view's own Tilt/Altitude-scale panel in the same
+        corner.
+      */}
+      {!is3D && (
+        <div className="pointer-events-none absolute bottom-9 left-3 z-[460]">
+          <div className="pointer-events-auto rounded-md border border-panel-700 bg-panel-900/95 px-2 py-1 text-[10px] text-slate-400 shadow-lg">
+            {selectedWaypoint ? (
+              <span className="font-mono text-slate-300">
+                {(settings.heightMode ?? 'ASL')} {Math.round(heightAt(selectedWaypoint, settings))} m
+              </span>
+            ) : (
+              <span>Select a waypoint for its altitude</span>
+            )}
+            <span className="mx-1.5 text-slate-600">·</span>
+            <span>WGS 84</span>
+          </div>
+        </div>
+      )}
 
       {is3D && (
         <div className="pointer-events-none absolute bottom-6 left-3 z-[460] flex flex-col gap-2">
