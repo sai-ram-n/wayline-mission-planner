@@ -24,8 +24,11 @@ import {
   LuCheck,
   LuCrosshair,
   LuLayers,
+  LuLoaderCircle,
   LuMaximize,
+  LuMapPin,
   LuPencil,
+  LuSearch,
   LuTrash2,
   LuUndo2,
   LuX,
@@ -46,6 +49,7 @@ import {
   waypointBounds,
 } from '../../lib/geo.js';
 import { groundClearance, rangeFor, wideHFov, zoomHFov, zoomRatioAt } from '../../lib/camera.js';
+import { buildSearchUrl, parseSearchResults } from '../../lib/geocode.js';
 import Map3DOverlay from './Map3DOverlay.jsx';
 import {
   DEFAULT_EXAGGERATION,
@@ -293,6 +297,95 @@ function CompassWidget({ heading }) {
       <span className={`text-[8px] font-medium ${known ? 'text-slate-300' : 'text-slate-600'}`}>
         {known ? `${Math.round(angle)}°` : 'N'}
       </span>
+    </div>
+  );
+}
+
+/**
+ * Place-name search (feature-gap audit §"Map search tool"). A free-standing
+ * box, not part of Leaflet's own control system, so it can own its own
+ * dropdown of results. `onSelect` receives the chosen `{ lat, lng }`.
+ */
+function MapSearchBox({ onSelect }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [open, setOpen] = useState(false);
+
+  const runSearch = async (event) => {
+    event.preventDefault();
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(buildSearchUrl(trimmed));
+      if (!response.ok) throw new Error('Search failed');
+      const parsed = parseSearchResults(await response.json());
+      setResults(parsed);
+      setOpen(true);
+      if (!parsed.length) setError('No matches found.');
+    } catch {
+      setResults([]);
+      setError('Search failed. Check your connection and try again.');
+      setOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="pointer-events-auto relative w-64">
+      <form onSubmit={runSearch} className="flex items-center gap-1 rounded-md border border-panel-700 bg-panel-900/95 px-2 py-1 shadow-lg">
+        <LuSearch className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onFocus={() => results.length && setOpen(true)}
+          placeholder="Search for a place"
+          aria-label="Search for a place on the map"
+          className="min-w-0 flex-1 bg-transparent text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none"
+        />
+        {loading && <LuLoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin text-slate-500" />}
+        {!loading && query && (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => {
+              setQuery('');
+              setResults([]);
+              setOpen(false);
+            }}
+            className="shrink-0 text-slate-500 hover:text-slate-300"
+          >
+            <LuX className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </form>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-panel-600 bg-panel-800 py-1 shadow-2xl">
+            {error && <p className="px-2.5 py-1.5 text-[11px] text-slate-500">{error}</p>}
+            {results.map((result, index) => (
+              <button
+                key={`${result.lat}-${result.lng}-${index}`}
+                type="button"
+                onClick={() => {
+                  onSelect(result);
+                  setOpen(false);
+                }}
+                className="flex w-full items-start gap-1.5 px-2.5 py-1.5 text-left text-[11px] text-slate-300 hover:bg-panel-700"
+              >
+                <LuMapPin className="mt-0.5 h-3 w-3 shrink-0 text-slate-500" />
+                <span className="min-w-0 flex-1 truncate">{result.label}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -862,6 +955,20 @@ export default function MapCanvas({
             onWheel={handle3DWheel}
           />
         </>
+      )}
+
+      {/*
+        Place search, top-left (feature-gap audit §"Map search tool"). Kept out
+        of 3D mode along with the compass/readout: the tilted view's own
+        screen-to-latlng math is unreliable under the CSS 3D transform (see the
+        handleMapClick comment above), and flyTo would fight it.
+      */}
+      {!is3D && !readOnly && (
+        <div className="pointer-events-none absolute left-3 top-3 z-[460]">
+          <MapSearchBox
+            onSelect={(result) => mapRef.current?.flyTo([result.lat, result.lng], 15)}
+          />
+        </div>
       )}
 
       {/* Map controls, kept outside the Leaflet container so they inherit app styling. */}
