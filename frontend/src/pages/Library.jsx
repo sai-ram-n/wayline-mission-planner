@@ -226,7 +226,14 @@ export default function Library() {
     }
   };
 
-  const handleCreateRoute = ({ route_type, aircraft_series, aircraft_model, payload_model, name }) => {
+  const handleCreateRoute = ({
+    route_type,
+    aircraft_series,
+    aircraft_model,
+    payload_model,
+    accessories,
+    name,
+  }) => {
     setCreateOpen(false);
     const params = new URLSearchParams({
       type: route_type,
@@ -235,6 +242,7 @@ export default function Library() {
       name,
     });
     if (payload_model) params.set('payload', payload_model);
+    if (accessories?.length) params.set('accessories', accessories.join(','));
     if (folderId) params.set('folder', folderId);
     navigate(`/editor?${params.toString()}`);
   };

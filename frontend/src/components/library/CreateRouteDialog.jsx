@@ -21,6 +21,7 @@ export default function CreateRouteDialog({ open, meta, existingNames = [], onCr
   const [series, setSeries] = useState('M30');
   const [model, setModel] = useState('M30T');
   const [payload, setPayload] = useState(null);
+  const [accessories, setAccessories] = useState([]);
   const [name, setName] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
 
@@ -43,6 +44,7 @@ export default function CreateRouteDialog({ open, meta, existingNames = [], onCr
     setSeries('M30');
     setModel('M30T');
     setPayload(null);
+    setAccessories([]);
     setNameTouched(false);
   }, [open]);
 
@@ -75,6 +77,7 @@ export default function CreateRouteDialog({ open, meta, existingNames = [], onCr
       aircraft_series: series,
       aircraft_model: model,
       payload_model: payload,
+      accessories,
       name: name.trim(),
     });
   };
@@ -156,6 +159,7 @@ export default function CreateRouteDialog({ open, meta, existingNames = [], onCr
                         setSeries(key);
                         setModel(Object.keys(entry.models ?? {})[0] ?? '');
                         setPayload(null);
+                        setAccessories([]);
                       }}
                       className={`w-full truncate rounded-md border px-2 py-1.5 text-left text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
                         series === key
@@ -212,6 +216,35 @@ export default function CreateRouteDialog({ open, meta, existingNames = [], onCr
                       </optgroup>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* M4E / M4D series carry optional payload accessories (§1). */}
+              {seriesEntry?.accessories && (
+                <div className="mt-2">
+                  <span className="label">Accessories</span>
+                  <div className="space-y-1">
+                    {seriesEntry.accessories.map((item) => {
+                      const checked = accessories.includes(item);
+                      return (
+                        <label
+                          key={item}
+                          className="flex items-center gap-1.5 rounded-md border border-panel-700 bg-panel-800 px-2 py-1.5 text-[11px] text-slate-300"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setAccessories((current) =>
+                                checked ? current.filter((a) => a !== item) : [...current, item]
+                              )
+                            }
+                          />
+                          {item}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

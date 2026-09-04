@@ -113,6 +113,7 @@ export default function Editor() {
       series: searchParams.get('series'),
       model: searchParams.get('model'),
       payload: searchParams.get('payload'),
+      accessories: searchParams.get('accessories')?.split(',').filter(Boolean) ?? [],
       name: searchParams.get('name'),
       folder: searchParams.get('folder'),
     });
@@ -167,6 +168,7 @@ export default function Editor() {
           ...(meta?.defaultSettings ?? {}),
           ...(extra ?? {}),
           ...(available.length ? { lenses: available } : {}),
+          ...(aircraft.accessories?.length ? { accessories: aircraft.accessories } : {}),
         },
       });
       setDraft([]);
