@@ -11,7 +11,7 @@
  *   2. With Follow Route on, the action inherits the route's Camera Settings and
  *      the per-action lens chips are disabled.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LuChevronLeft, LuChevronRight, LuPencil, LuPlus, LuTrash2, LuCheck, LuX } from 'react-icons/lu';
 
 import useMissionStore from '../../store.js';
@@ -415,6 +415,27 @@ export default function ActionEditor({ waypointIndex, disabled = false }) {
   const action = index != null ? actions[index] : null;
   const Icon = action ? ACTION_ICONS[action.action_type] : null;
 
+  /*
+    Two-click delete confirm (feature-gap audit §"Actions deletable"): the
+    reference requires a second click on the same trash icon before an action
+    is actually removed. Armed state resets whenever the selection moves, so a
+    stray click elsewhere never leaves the "one click from deleting" state
+    pointed at the wrong action.
+  */
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  useEffect(() => {
+    setConfirmingDelete(false);
+  }, [waypointIndex, index]);
+
+  const handleDeleteClick = () => {
+    if (confirmingDelete) {
+      removeAction(waypointIndex, index);
+      setConfirmingDelete(false);
+    } else {
+      setConfirmingDelete(true);
+    }
+  };
+
   const modelEntry = meta.aircraft?.[mission.aircraft_series]?.models?.[mission.aircraft_model];
   const handleAdd = (type) =>
     addAction(
@@ -491,10 +512,14 @@ export default function ActionEditor({ waypointIndex, disabled = false }) {
 
             <button
               type="button"
-              title="Delete action"
+              title={confirmingDelete ? 'Click again to delete this action' : 'Delete action'}
               disabled={disabled || index == null}
-              onClick={() => removeAction(waypointIndex, index)}
-              className="btn-ghost p-0.5 text-slate-500 hover:text-red-400"
+              onClick={handleDeleteClick}
+              className={`btn-ghost p-0.5 ${
+                confirmingDelete
+                  ? 'bg-red-950/60 text-red-400'
+                  : 'text-slate-500 hover:text-red-400'
+              }`}
             >
               <LuTrash2 className="h-3 w-3" />
             </button>
