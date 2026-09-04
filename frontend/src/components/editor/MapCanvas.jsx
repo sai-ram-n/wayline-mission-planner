@@ -32,6 +32,7 @@ import {
   LuMaximize,
   LuMapPin,
   LuPencil,
+  LuPlaneTakeoff,
   LuRuler,
   LuSearch,
   LuShieldAlert,
@@ -58,6 +59,7 @@ import {
 } from '../../lib/geo.js';
 import { groundClearance, rangeFor, wideHFov, zoomHFov, zoomRatioAt } from '../../lib/camera.js';
 import { buildSearchUrl, parseSearchResults } from '../../lib/geocode.js';
+import { VIRTUAL_FLIGHT_KEYS, stepVirtualFlight } from '../../lib/virtualFlight.js';
 import api from '../../api.js';
 import Map3DOverlay from './Map3DOverlay.jsx';
 import {
@@ -644,8 +646,89 @@ export default function MapCanvas({
   const exit3D = () => {
     setIs3D(false);
     setPitch(0);
+    setVirtualFlight(null);
     setTimeout(() => mapRef.current?.invalidateSize({ animate: false }), 60);
   };
+
+  /* --------------------------------------------------- virtual flight (FPV) */
+  /*
+    Feature-gap audit §"Virtual-flight / FPV authoring". DJI's own mode needs
+    a real 3D terrain/scene service this build has no dependency on (project
+    decision, not made) — see docs/DJI_MATRICE_4D_FINAL_GAP_ANALYSIS.md. This
+    is the scoped-down version: fly a virtual aircraft with discrete WASD/QE/
+    CZ steps (lib/virtualFlight.js) over the existing flat-ground tilted view,
+    and drop a waypoint at its position/heading with Space — same fields the
+    click-to-place path already writes, just sourced from the flight state
+    instead of a map click.
+  */
+  const [virtualFlight, setVirtualFlight] = useState(null);
+
+  const startVirtualFlight = () => {
+    if (readOnly) return;
+    setAnnotateMode(null);
+    setAnnotateDraft([]);
+    if (!is3D) enter3D();
+
+    const lastIndex = waypoints.length - 1;
+    const last = waypoints[lastIndex];
+    let seed;
+    if (last) {
+      seed = {
+        lat: last.lat,
+        lng: last.lng,
+        height: heightAt(last, settings),
+        heading: headingAt(waypoints, lastIndex, settings),
+      };
+    } else {
+      const center = mapRef.current?.getCenter();
+      seed = {
+        lat: center?.lat ?? DEFAULT_CENTER[0],
+        lng: center?.lng ?? DEFAULT_CENTER[1],
+        height: settings.globalHeight ?? 100,
+        heading: 0,
+      };
+    }
+    setVirtualFlight(seed);
+  };
+
+  const stopVirtualFlight = () => setVirtualFlight(null);
+
+  useEffect(() => {
+    if (!virtualFlight) return undefined;
+    const onKey = (event) => {
+      if (event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const key = event.key.toLowerCase();
+      if (VIRTUAL_FLIGHT_KEYS.includes(key)) {
+        event.preventDefault();
+        setVirtualFlight((current) => (current ? stepVirtualFlight(current, key) : current));
+        return;
+      }
+      if (event.key === ' ') {
+        event.preventDefault();
+        onAddWaypoint?.({
+          lat: virtualFlight.lat,
+          lng: virtualFlight.lng,
+          // Captured live, not inherited from the route — same as the
+          // reference: virtual-flight waypoints record the exact altitude and
+          // heading the aircraft had, not the route defaults.
+          height: virtualFlight.height,
+          use_global_height: false,
+          heading_mode: 'manually',
+          heading_angle: virtualFlight.heading,
+          use_global_heading: false,
+        });
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        stopVirtualFlight();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [virtualFlight, onAddWaypoint]);
 
   /*
    * Leaflet derives lat/lng from the container's bounding rect, which a CSS 3D
@@ -1274,6 +1357,8 @@ export default function MapCanvas({
             exaggeration={effectiveExaggeration}
             perspective={perspective}
             inset={PLANE_INSET}
+            virtualFlight={virtualFlight}
+            aircraftModel={aircraftModel}
           />
 
           {/* Interaction surface: our own pan, tilt and zoom while Leaflet's are off. */}
@@ -1326,6 +1411,27 @@ export default function MapCanvas({
             </button>
           ))}
         </div>
+
+        {/* Virtual flight (FPV authoring) — see the block above for scope notes. */}
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => (virtualFlight ? stopVirtualFlight() : startVirtualFlight())}
+            title={
+              virtualFlight
+                ? 'Land — exit virtual flight'
+                : 'Virtual Flight: fly a virtual aircraft with W/A/S/D, Q/E to yaw, C/Z for altitude, Space to drop a waypoint'
+            }
+            aria-pressed={!!virtualFlight}
+            className={`pointer-events-auto rounded-md border p-2 shadow-lg transition-colors ${
+              virtualFlight
+                ? 'border-accent bg-accent text-white'
+                : 'border-panel-700 bg-panel-900/95 text-slate-300 hover:bg-panel-700'
+            }`}
+          >
+            <LuPlaneTakeoff className="h-4 w-4" />
+          </button>
+        )}
 
         <div className="pointer-events-auto flex flex-col overflow-hidden rounded-md border border-panel-700 bg-panel-900/95 shadow-lg">
           <button
@@ -1492,10 +1598,40 @@ export default function MapCanvas({
         </div>
       )}
 
-      {is3D && !readOnly && (
+      {is3D && !readOnly && !virtualFlight && (
         <div className="pointer-events-none absolute inset-x-0 top-3 z-[460] flex justify-center">
           <div className="rounded-full border border-panel-600 bg-panel-900/95 px-4 py-1.5 text-xs text-slate-300 shadow-lg">
-            3D is view only — switch to 2D to edit
+            3D is view only — switch to 2D to edit, or start Virtual Flight to add waypoints here
+          </div>
+        </div>
+      )}
+
+      {/*
+        Virtual flight HUD (feature-gap audit §"Virtual-flight / FPV
+        authoring"). Replaces the view-only banner above while flying — this
+        mode IS an editing mode, unlike plain 3D. No live camera-preview image
+        (no rendering pipeline for one — see the coverage cone in
+        Map3DOverlay instead, which shows the same footprint DJI's preview
+        would frame); the reference's Snapshot Preview / AI Spot-Check are
+        the other pieces of §4/§6 this build was already documented as not
+        replicating.
+      */}
+      {virtualFlight && (
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-[460] flex justify-center">
+          <div className="pointer-events-auto flex flex-wrap items-center gap-3 rounded-full border border-accent/40 bg-panel-900/95 px-4 py-1.5 text-xs text-slate-200 shadow-lg">
+            <span className="font-mono text-accent">
+              ALT {Math.round(virtualFlight.height)} m · HDG {Math.round(virtualFlight.heading)}°
+            </span>
+            <span className="text-slate-500">
+              W/A/S/D move · Q/E yaw · C/Z altitude · Space adds a waypoint · Esc lands
+            </span>
+            <button
+              type="button"
+              onClick={stopVirtualFlight}
+              className="btn-ghost px-2 py-0.5 text-[11px]"
+            >
+              Land
+            </button>
           </div>
         </div>
       )}

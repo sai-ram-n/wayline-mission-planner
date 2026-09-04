@@ -11,8 +11,9 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 
-import { MAP_COLORS } from '../../lib/constants.js';
-import { heightAt } from '../../lib/geo.js';
+import { COVERAGE_OPACITY, MAP_COLORS } from '../../lib/constants.js';
+import { coverageWedge, heightAt } from '../../lib/geo.js';
+import { groundClearance, rangeFor, wideHFov, zoomHFov, zoomRatioAt } from '../../lib/camera.js';
 import { altitudeToPixels, project3d } from '../../lib/projection3d.js';
 
 export default function Map3DOverlay({
@@ -32,6 +33,16 @@ export default function Map3DOverlay({
    * rectangle, or the route floats away from the tiles.
    */
   inset = 0,
+  /**
+   * Virtual-flight authoring (feature-gap audit §"Virtual-flight / FPV
+   * authoring"): `{ lat, lng, height, heading }` for the aircraft currently
+   * being flown, or null when not flying. Drawn as its own column + marker +
+   * live camera-coverage cone, same math as the saved-waypoint coverage
+   * wedges in MapCanvas.jsx (§ camera.js), just fed a live position instead
+   * of a stored one.
+   */
+  virtualFlight = null,
+  aircraftModel = null,
 }) {
   // Leaflet owns the view, so redraw whenever it changes underneath us. The
   // counter has to feed the memo below, or the scene is served from cache and
@@ -74,13 +85,52 @@ export default function Map3DOverlay({
       ? place(takeoffPoint.lat, takeoffPoint.lng, 0).ground
       : null;
 
-    return { view, points, shape, takeoff };
+    let flight = null;
+    if (virtualFlight) {
+      const { lat, lng, height, heading } = virtualFlight;
+      const marker = place(lat, lng, height);
+      // Same wide/zoom wedge math as the saved-waypoint coverage layer
+      // (MapCanvas.jsx), just against the live virtual position.
+      const vwaypoint = { height, use_global_height: false, actions: [] };
+      const wideFov = wideHFov(aircraftModel);
+      const clearance = groundClearance(vwaypoint, settings);
+      const range = wideFov ? rangeFor(clearance) : 0;
+      const wedges = [];
+      if (range) {
+        const zoomFov = zoomHFov(wideFov, zoomRatioAt(vwaypoint, settings));
+        wedges.push({
+          ring: coverageWedge(lat, lng, heading, wideFov, range).map((p) => place(...p, 0).ground),
+          color: MAP_COLORS.coverageWide,
+        });
+        if (zoomFov < wideFov - 0.01) {
+          wedges.push({
+            ring: coverageWedge(lat, lng, heading, zoomFov, range).map((p) => place(...p, 0).ground),
+            color: MAP_COLORS.coverageZoom,
+          });
+        }
+      }
+      flight = { marker, heading, wedges };
+    }
+
+    return { view, points, shape, takeoff, flight };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, waypoints, settings, geometry, takeoffPoint, pitch, exaggeration, perspective, tick]);
+  }, [
+    map,
+    waypoints,
+    settings,
+    geometry,
+    takeoffPoint,
+    pitch,
+    exaggeration,
+    perspective,
+    tick,
+    virtualFlight,
+    aircraftModel,
+  ]);
 
   if (!scene) return null;
 
-  const { view, points, shape, takeoff } = scene;
+  const { view, points, shape, takeoff, flight } = scene;
   const visible = points.filter((p) => p.ground.visible && p.top.visible);
 
   const polyline = (list, accessor) =>
@@ -237,6 +287,49 @@ export default function Map3DOverlay({
           </g>
         );
       })}
+
+      {/* The virtual aircraft: live camera coverage, altitude column, heading marker. */}
+      {flight && (
+        <>
+          {flight.wedges.map(({ ring, color }, i) => (
+            <polygon
+              key={`flight-cov-${i}`}
+              points={ring.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}
+              fill={color}
+              fillOpacity={COVERAGE_OPACITY.fill}
+              stroke={color}
+              strokeOpacity={COVERAGE_OPACITY.outline}
+              strokeWidth={1.5}
+            />
+          ))}
+          {flight.marker.ground.visible && flight.marker.top.visible && (
+            <line
+              x1={flight.marker.ground.x}
+              y1={flight.marker.ground.y}
+              x2={flight.marker.top.x}
+              y2={flight.marker.top.y}
+              stroke={MAP_COLORS.markerSelected}
+              strokeWidth={2}
+              strokeOpacity={0.7}
+              strokeDasharray="4 3"
+              strokeLinecap="round"
+            />
+          )}
+          {flight.marker.top.visible && (
+            <g
+              transform={`translate(${flight.marker.top.x},${flight.marker.top.y}) rotate(${flight.heading})`}
+            >
+              <polygon
+                points="0,-12 8,10 0,5 -8,10"
+                fill={MAP_COLORS.markerSelected}
+                stroke="#fff"
+                strokeWidth={1.5}
+                strokeLinejoin="round"
+              />
+            </g>
+          )}
+        </>
+      )}
     </svg>
   );
 }

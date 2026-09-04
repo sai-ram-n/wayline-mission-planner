@@ -295,9 +295,13 @@ export default function Editor() {
 
   const takeoffPoint = mission.settings?.takeOffRefPoint ?? null;
 
-  const handleAddWaypoint = ({ lat, lng }) => {
+  // Virtual Flight (MapCanvas.jsx) passes height/heading_mode/heading_angle
+  // alongside lat/lng, captured live from the aircraft rather than defaulted —
+  // addWaypoint's `partial` already accepts any waypoint field, so these just
+  // pass through.
+  const handleAddWaypoint = ({ lat, lng, ...rest }) => {
     if (mission.locked) return showToast('This wayline is locked');
-    addWaypoint({ lat, lng });
+    addWaypoint({ lat, lng, ...rest });
   };
 
   const handlePlacePoint = ({ lat, lng }, mode) => {
